@@ -132,20 +132,47 @@ Request-change control bar, plus the sticky action bar and the submit JavaScript
 (all from `references/review-ui.md`). Set `<body data-branch="…">` so decisions are
 tagged. Save to `/tmp/YYYY-MM-DD-pr-review-<branch>.html`.
 
-Then start the **live review server** in the background and open the URL it prints:
+Then run the **live review server and wait for the submit in the same command** — this
+is the single most important step. The server serves the page, blocks until the user
+clicks Submit (writing the decisions file and exiting), so a single foreground run both
+opens the review and hands you the result without ever ending your turn:
+
+Run this as **one Bash tool call** (do not split the launch and the wait across
+separate calls — a `wait`/poll in a later call can't see a server started in an
+earlier one, which drops the loop):
 
 ```bash
+OUT=/tmp/pr-review-decisions.json
+rm -f "$OUT"                         # clear any stale decisions first
 python3 <skill>/scripts/review_server.py \
   --page /tmp/YYYY-MM-DD-pr-review-<branch>.html \
-  --out  /tmp/pr-review-decisions.json &
-# it prints:  PR_REVIEW_URL http://127.0.0.1:<port>/
-open "http://127.0.0.1:<port>/"
+  --out  "$OUT" --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
+sleep 1
+URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
+open "$URL"
+echo "Review open at $URL — waiting for Submit…"
+# Poll for the decisions file (robust: works even if the server already exited).
+while [ ! -f "$OUT" ]; do sleep 2; done
+cat "$OUT"
 ```
 
-Tell the user to review each section and click **Submit review** when done. This is
-the moment the skill becomes interactive — don't just write the file and stop. (If
-Python 3 isn't available, skip the server and just `open` the HTML file directly; the
-page falls back to a Download-decisions button.)
+Give the Bash call a long timeout (e.g. 30–60 min) so it can block for the whole
+review. Polling the output file is deliberately more robust than `wait $PID`: it
+succeeds whether the server is still running, already exited, or was reparented.
+
+> [!IMPORTANT]
+> Do **not** launch the server and then end your turn — if nothing is waiting when the
+> user clicks Submit, the decisions land in the file but the loop never continues, and
+> the user is left staring at a "Sent" page that goes nowhere. Keep the `wait` in the
+> same turn so you pick up the submit immediately. Give the run a generous timeout
+> (the server default is 30 min); if it times out before the user is done, just
+> re-run it against the same page.
+
+Tell the user to review each section and click **Submit review** when done, and that
+**they can close the browser tab themselves afterward** — the page shows "Sent" but a
+tab can't close itself. (If Python 3 isn't available, skip the server and `open` the
+HTML file directly; the page falls back to a Download-decisions button, and you then
+read `~/Downloads/pr-review-decisions.json`.)
 
 ### 4. Write the Markdown body, filling the repo's template
 
@@ -160,19 +187,21 @@ before/after numbers. Near the top of the Description, link to the review page. 
 `references/markdown-body.md` for conventions and a worked example. Save to
 `/tmp/pr-body-<branch>.md`.
 
-### 5. Run the review loop
+### 5. Act on the decisions and loop
 
-Wait for the decisions to come back. In **live mode** the server writes
-`/tmp/pr-review-decisions.json` and exits (`PR_REVIEW_DONE`) the moment the user hits
-Submit — wait for that file to appear (poll it, or wait on the background process),
-then read it. In **fallback mode** read `~/Downloads/pr-review-decisions.json` (check
-for `pr-review-decisions (1).json` if exported more than once).
+The `wait` in step 3 already blocked until the decisions file was written, so you have
+it in hand. (Fallback mode: read `~/Downloads/pr-review-decisions.json`, checking for
+`pr-review-decisions (1).json` if exported more than once.)
 
-If `overall` is `approved`, finalize and print the Markdown body inline. Otherwise,
-revise each `changes_requested` section per its comment, leave approved sections
-untouched, regenerate the review page, restart the server, re-open it, and repeat
-until everything is approved. See `references/review-ui.md` for the decisions schema
-and the exact behavior.
+Read the file and act:
+
+- **`overall: approved`** — finalize and print the Markdown body inline. Done.
+- **anything else** — revise each section marked `changes_requested` per its comment,
+  leave `approved` sections untouched, and treat `pending` sections as accepted-as-is
+  unless the user says otherwise. Regenerate the review page + Markdown, then go back
+  to step 3 (re-serve + wait) for another pass. Repeat until approved.
+
+See `references/review-ui.md` for the decisions schema and the exact behavior.
 
 ## Writing style
 

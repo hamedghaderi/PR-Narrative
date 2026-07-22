@@ -123,18 +123,29 @@ Before writing, answer these in one or two sentences each:
 
 If you can't answer these, you don't understand the change yet — go back to step 1.
 
-### 3. Build the interactive review page and open it
+### 3. Build the interactive review page, serve it, and open it
 
 Create the self-contained HTML review page: the report-quality before/after panels +
 Background/Description narrative (styling from `references/html-visual.md`), with each
 reviewable block wrapped in a `<section data-review-id="…">` carrying the Approve /
-Request-change control bar, plus the sticky action bar and the export JavaScript
-(all from `references/review-ui.md`). Set `<body data-branch="…">` so the exported
-decisions are tagged. Save to `/tmp/YYYY-MM-DD-pr-review-<branch>.html`.
+Request-change control bar, plus the sticky action bar and the submit JavaScript
+(all from `references/review-ui.md`). Set `<body data-branch="…">` so decisions are
+tagged. Save to `/tmp/YYYY-MM-DD-pr-review-<branch>.html`.
 
-Then **open it automatically** (`open <file>` on macOS) and tell the user to review
-each section and click **Download decisions** when done. This is the moment the skill
-becomes interactive — don't just write the file and stop.
+Then start the **live review server** in the background and open the URL it prints:
+
+```bash
+python3 <skill>/scripts/review_server.py \
+  --page /tmp/YYYY-MM-DD-pr-review-<branch>.html \
+  --out  /tmp/pr-review-decisions.json &
+# it prints:  PR_REVIEW_URL http://127.0.0.1:<port>/
+open "http://127.0.0.1:<port>/"
+```
+
+Tell the user to review each section and click **Submit review** when done. This is
+the moment the skill becomes interactive — don't just write the file and stop. (If
+Python 3 isn't available, skip the server and just `open` the HTML file directly; the
+page falls back to a Download-decisions button.)
 
 ### 4. Write the Markdown body, filling the repo's template
 
@@ -151,13 +162,17 @@ before/after numbers. Near the top of the Description, link to the review page. 
 
 ### 5. Run the review loop
 
-After the user reviews in the browser and exports, read
-`~/Downloads/pr-review-decisions.json` (check for `pr-review-decisions (1).json` etc.
-if they exported more than once). If `overall` is `approved`, finalize and print the
-Markdown body inline. Otherwise, revise each `changes_requested` section per its
-comment, leave approved sections untouched, regenerate the review page, re-open it,
-and repeat until everything is approved. See `references/review-ui.md` for the
-decisions schema and the exact after-export behavior.
+Wait for the decisions to come back. In **live mode** the server writes
+`/tmp/pr-review-decisions.json` and exits (`PR_REVIEW_DONE`) the moment the user hits
+Submit — wait for that file to appear (poll it, or wait on the background process),
+then read it. In **fallback mode** read `~/Downloads/pr-review-decisions.json` (check
+for `pr-review-decisions (1).json` if exported more than once).
+
+If `overall` is `approved`, finalize and print the Markdown body inline. Otherwise,
+revise each `changes_requested` section per its comment, leave approved sections
+untouched, regenerate the review page, restart the server, re-open it, and repeat
+until everything is approved. See `references/review-ui.md` for the decisions schema
+and the exact behavior.
 
 ## Writing style
 

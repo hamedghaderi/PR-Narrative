@@ -1,26 +1,33 @@
 # Interactive review UI — the approve/reject HTML
 
-This is what makes the skill *interactive* rather than a static write-up. It's a
-single self-contained HTML file (same spirit as the explain-diff report: auto-opens,
-all CSS/JS inline, no server) — but where explain-diff had a quiz, this has a
-**section-by-section review**: each part of the PR is shown with **Approve /
-Request change** buttons and a comment box, and a **Download decisions** button
-exports the user's choices as JSON so the agent can regenerate the final PR body.
+This is what makes the skill *interactive* rather than a static write-up. The page
+shows a **section-by-section review**: each part of the PR gets **Approve / Request
+change** buttons and a comment box. When the reviewer is done they click **Submit**,
+and their decisions come straight back to the agent.
 
 ## The round-trip (how decisions come back)
 
-There is no server. The flow mirrors the skill-creator eval-viewer's static mode:
+The primary path is a **live local server** (`scripts/review_server.py`) so there's no
+manual download/hand-back step. The page also keeps a **Download-decisions fallback**
+so it still works if opened without the server.
 
-1. The agent writes the review HTML to `/tmp/YYYY-MM-DD-pr-review-<branch>.html` and
-   opens it (`open <file>` on macOS).
-2. The user reviews each section, clicks Approve / Request change, and types comments.
-   Choices are held in the page (and mirrored to `localStorage` so a refresh doesn't
-   lose them).
-3. The user clicks **Download decisions** → the browser saves
-   `pr-review-decisions.json` to their Downloads folder.
-4. The user hands that file back (or tells the agent it's in `~/Downloads/`). The agent
-   reads it and regenerates the final Markdown body: approved sections kept as-is,
-   "request change" sections revised per the comment.
+**Live mode (primary):**
+
+1. The agent writes the review HTML to `/tmp/YYYY-MM-DD-pr-review-<branch>.html`, then
+   starts the server pointing at it:
+   `python3 scripts/review_server.py --page <html> --out /tmp/pr-review-decisions.json`.
+   The server prints `PR_REVIEW_URL http://127.0.0.1:<port>/` and injects a
+   `<meta name="pr-review-live" content="1">` marker into the page it serves.
+2. The agent opens that URL in the browser. The page sees the live marker and switches
+   its Submit button to **POST `/submit`** instead of downloading a file.
+3. The user reviews each section (Approve / Request change + comments — choices are
+   mirrored to `localStorage` so a refresh won't lose them) and clicks **Submit**.
+4. The POST body is the decisions JSON; the server writes it atomically to `--out` and
+   shuts down (printing `PR_REVIEW_DONE`). The agent reads that file and revises.
+
+**Fallback mode (no server):** if the page is opened directly as a `file://` (no live
+marker), Submit becomes **Download decisions** → saves `pr-review-decisions.json` to
+Downloads, which the user hands back. Same JSON either way.
 
 > Keep the decisions JSON small and predictable so the agent can act on it
 > deterministically. The schema is defined below.
@@ -103,24 +110,27 @@ Give every reviewable block a stable `data-review-id` and drop in the control ba
 </style>
 ```
 
-### Sticky action bar (progress + export)
+### Sticky action bar (progress + submit)
 
-Put this near the top of `<body>`, before the sections:
+Put this near the top of `<body>`, before the sections. The Submit button's label is
+set by the JS depending on whether the live server is present.
 
 ```html
 <div class="review-actionbar">
   <strong>PR review</strong>
   <span class="progress" id="rv-progress">0 / N reviewed</span>
   <button class="secondary" id="rv-reset" type="button">Reset</button>
-  <button id="rv-export" type="button">⬇ Download decisions</button>
+  <button id="rv-submit" type="button">Submit</button>
 </div>
 ```
 
 ### The JavaScript (self-contained, no dependencies)
 
 This wires every section's buttons, tracks state, persists to `localStorage`, updates
-progress, and exports `pr-review-decisions.json`. It reads the branch from a
-`<body data-branch="…">` attribute the agent sets when generating the file.
+progress, and submits the decisions. It reads the branch from a
+`<body data-branch="…">` attribute, and detects live mode from the
+`<meta name="pr-review-live">` marker the server injects — POSTing to `/submit` when
+live, or downloading `pr-review-decisions.json` as the fallback.
 
 ```html
 <script>
@@ -128,6 +138,7 @@ progress, and exports `pr-review-decisions.json`. It reads the branch from a
   const branch = document.body.dataset.branch || "unknown-branch";
   const sections = Array.from(document.querySelectorAll(".review-section"));
   const storeKey = "pr-review:" + branch;
+  const isLive = !!document.querySelector('meta[name="pr-review-live"]');
 
   const state = JSON.parse(localStorage.getItem(storeKey) || "{}");
 
@@ -184,7 +195,7 @@ progress, and exports `pr-review-decisions.json`. It reads the branch from a
     save(); updateProgress();
   });
 
-  document.getElementById("rv-export").addEventListener("click", () => {
+  function buildPayload() {
     const decisions = sections.map(sec => ({
       id: sec.dataset.reviewId,
       label: sec.dataset.reviewLabel || sec.dataset.reviewId,
@@ -193,32 +204,68 @@ progress, and exports `pr-review-decisions.json`. It reads the branch from a
     }));
     const anyChanges = decisions.some(d => d.decision === "changes_requested");
     const allApproved = decisions.every(d => d.decision === "approved");
-    const payload = {
+    return {
       branch: branch,
       generated_at: new Date().toISOString(),
       overall: anyChanges ? "changes_requested" : allApproved ? "approved" : "pending",
       sections: decisions
     };
+  }
+
+  const submitBtn = document.getElementById("rv-submit");
+  submitBtn.textContent = isLive ? "Submit review" : "⬇ Download decisions";
+
+  submitBtn.addEventListener("click", async () => {
+    const payload = buildPayload();
+    if (isLive) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+      try {
+        const res = await fetch("/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        submitBtn.textContent = "✓ Sent — you can close this tab";
+      } catch (e) {
+        // Server gone? Fall back to a download so the review isn't lost.
+        submitBtn.disabled = false;
+        submitBtn.textContent = "⬇ Download decisions (server unreachable)";
+        download(payload);
+      }
+      return;
+    }
+    download(payload);
+  });
+
+  function download(payload) {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "pr-review-decisions.json";
     document.body.appendChild(a); a.click(); a.remove();
-  });
+  }
 })();
 </script>
 ```
 
-## What the agent does after the user exports
+## What the agent does after the user submits
 
-1. Read `~/Downloads/pr-review-decisions.json` (or wherever the user says it landed;
-   check for `pr-review-decisions (1).json` if they exported more than once).
-2. If `overall` is `approved`, finalize the Markdown body as-is and hand it over.
-3. Otherwise, for each section with `decision: "changes_requested"`, revise that
-   section per its `comment`, leave approved sections untouched, regenerate both the
-   Markdown body and (if the visual changed) the HTML companion, and — because the
-   user has more feedback to give — re-open the review HTML for another pass. Repeat
-   until `overall` is `approved`.
+**Live mode:** the server writes the decisions to `--out` (e.g.
+`/tmp/pr-review-decisions.json`) and exits with `PR_REVIEW_DONE`. The agent, having
+launched the server in the background, waits for that file to appear (poll it, or wait
+for the process to exit) and reads it. **Fallback mode:** read
+`~/Downloads/pr-review-decisions.json` (check for `pr-review-decisions (1).json` if
+exported more than once).
 
-This is the loop: **generate → open → review → export → revise → re-open → …** until
-the user approves everything.
+Then, regardless of mode:
+
+1. If `overall` is `approved`, finalize the Markdown body as-is and hand it over.
+2. Otherwise, for each section with `decision: "changes_requested"`, revise that
+   section per its `comment`, leave approved sections untouched, regenerate the
+   Markdown body and (if the visual changed) the review page, restart the server, and
+   re-open it for another pass. Repeat until `overall` is `approved`.
+
+This is the loop: **generate → serve + open → review → submit → revise → re-serve → …**
+until the user approves everything.

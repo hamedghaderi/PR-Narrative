@@ -17,14 +17,15 @@ PR.
 
 Two artifacts, plus an interactive review loop:
 
-1. **An interactive HTML review page** — self-contained (inline CSS/JS, no server)
-   and it **opens automatically in your browser**. It shows the rich visual —
-   report-quality before/after panels (colored request rows, a red failure, an
-   "extract locally" step, file chips) and the Background/Description narrative — and
-   under each section adds **Approve / Request-change** controls and a comment box.
-   You review section by section and click **Download decisions**; the agent reads
-   that file and revises until every section is approved. No mermaid, no ASCII art —
-   real HTML/CSS.
+1. **An interactive HTML review page** — it **opens automatically in your browser**
+   and shows the rich visual (report-quality before/after panels — colored request
+   rows, a red failure, an "extract locally" step, file chips — and the
+   Background/Description narrative), with **Approve / Request-change** controls and a
+   comment box under each section. You review section by section and click **Submit**;
+   your decisions go straight back to the agent via a small bundled local server
+   (`scripts/review_server.py`, Python stdlib, no installs), which revises until every
+   section is approved. If the server isn't running, the page falls back to a
+   **Download decisions** button. No mermaid, no ASCII art — real HTML/CSS.
 2. **A GitHub-flavored Markdown PR body** — fills your repo's PR template, is complete
    on its own (a reviewer who never opens the HTML still gets the full story), uses
    GitHub `> [!NOTE]` / `> [!TIP]` callouts and comparison tables, and links to the
@@ -120,7 +121,9 @@ you've approved everything, then gives you the final Markdown. Create the PR you
 ├── references/
 │   ├── html-visual.md        # HTML/CSS for the before/after panels + worked example
 │   ├── markdown-body.md      # GitHub callout/table conventions + worked example
-│   └── review-ui.md          # interactive review page: controls, export JS, decisions schema
+│   └── review-ui.md          # interactive review page: controls, submit JS, decisions schema
+├── scripts/
+│   └── review_server.py      # live review server (stdlib): serves page, captures Submit, writes decisions
 ├── examples/
 │   ├── pr-body-thumbnails.md   # a generated Markdown PR body (generic scenario)
 │   └── pr-thumbnails.html      # the matching HTML visual (open in a browser)

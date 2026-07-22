@@ -2,20 +2,64 @@
 
 [![Install with npx skills](https://img.shields.io/badge/npx%20skills%20add-hamedghaderi%2FPR--Review-black?logo=npm)](https://github.com/vercel-labs/skills)
 
-An agent skill that writes **pull-request descriptions that read like a clear
-explainer instead of a code dump.**
+An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
+the descriptions for the ones you open yourself.**
 
-Most PR descriptions are written for the author, not the reviewer — they list which
-files changed and restate the diff in prose the reviewer can already see. This skill
-does the opposite: it gives the reviewer the *context* and the *mental model* they
-need before they read a single line of the diff. It answers **"why does this change
-exist?"** and **"what's the core idea?"**, using a styled before/after visual, small
-concrete examples, and comparison tables.
+Reviewing a PR usually means opening a diff cold: no context for why the change
+exists, and comments left one at a time with no way to gather them into an actual
+review. Writing one has the mirror problem. The author understands the change, but
+the description rarely conveys it, so the reviewer starts cold anyway.
 
-It's modelled on the "Background" and "Intuition" of a change explainer, shaped for a
-PR.
+**Reviewer mode** fixes the first half. Point it at a PR (or a local branch that
+doesn't have one yet) and it builds a page with the narrative context up top and the
+real diff below it: click a line to comment, optionally triage a small, capped set of
+AI-drafted risk callouts, then hit Submit. Against a real PR, your accepted comments
+land as a **pending** GitHub review, one you finalize yourself, on github.com, by
+clicking Approve, Request changes, or Comment. Reviewing a local branch produces the
+same page but posts nothing; Submit hands you back a fix-list instead.
+
+**Author mode** is the original pitch, unchanged: it writes **pull-request
+descriptions that read like a clear explainer instead of a code dump.** Most PR
+descriptions are written for the author, not the reviewer — they list which files
+changed and restate the diff in prose the reviewer can already see. This mode does the
+opposite: it gives the reviewer the *context* and the *mental model* they need before
+they read a single line of the diff. It answers **"why does this change exist?"** and
+**"what's the core idea?"**, using a styled before/after visual, small concrete
+examples, and comparison tables.
+
+Both modes share the same narrative discipline (a Background/Description panel, no
+mermaid diagrams, no method-name dumps) and both stop short of the final action:
+reviewer mode never submits a verdict, author mode never opens the PR. You always take
+that last step yourself.
 
 ## What it produces
+
+### Reviewer mode
+
+An annotation page, plus one of two outcomes depending on whether a PR exists yet.
+
+1. **An annotation page**: the same styled narrative panel as author mode up top
+   (Background/Description, no mermaid, no ASCII art), with the actual diff rendered
+   below it across two line-number gutters. Click a line to comment, drag across a few
+   lines for a range, or leave a suggestion. The skill can also pre-seed a small,
+   capped set of AI-drafted risk callouts (probable bugs, security issues, missing
+   error handling, breaking-change risk, up to 3 per file and 10 per review), each
+   shown visually distinct from your own comments and unaccepted by default; you
+   decide which ones to keep.
+2. **A pending GitHub review** (PR path). On Submit, your accepted comments and
+   drafts post to the PR as a single pending review. Nothing is finalized: you still
+   open the PR on github.com and click Approve, Request changes, or Comment yourself.
+   If a pending review from you already exists on that PR, the skill asks whether to
+   replace it or leave it alone; it never creates a second one.
+3. **A local fix-list** (no PR yet). Reviewing a branch before you've opened a PR
+   builds the same annotation page, but nothing gets posted anywhere. Submit hands you
+   a Markdown fix-list of your accepted findings instead, with a reminder that they're
+   unverified until you confirm each one.
+
+The flow: **fetch the diff → explain it → annotate (triage any AI drafts) → Submit →
+pending review on GitHub** (or a fix-list, for a local branch).
+
+### Author mode
 
 Two artifacts, plus an interactive review loop:
 
@@ -134,8 +178,23 @@ just for reference.
 
 ## Usage
 
-Once installed, the skill triggers when you ask your agent to write a PR description.
-Natural phrasings that trigger it:
+Once installed, the skill triggers on either intent: reviewing a diff, or writing a
+description for one.
+
+**To review**, natural phrasings that trigger it:
+
+- `"review this PR <url>"`
+- "review PR #42"
+- "review my branch" / "review my changes before I open a PR"
+
+The agent fetches the PR (or diffs your branch locally if there's no PR yet), writes
+the same kind of narrative it uses for author mode, builds the annotation page, and
+opens it in your browser. Leave comments on the lines that matter, triage any
+AI-drafted callouts, and click **Submit**. Reviewing a real PR needs `gh` installed
+and authenticated, since that's how the skill fetches PR data and posts the pending
+review. Reviewing a local branch needs no `gh` at all.
+
+**To write a PR description**, natural phrasings that trigger it:
 
 - "write the PR for this branch"
 - "make a PR description for these changes"
@@ -145,19 +204,31 @@ The agent will read the diff against your base branch, understand the change, ge
 the review page and open it in your browser. Review each section (Approve / Request
 change), click **Download decisions**, and hand the file back; the agent revises until
 you've approved everything, then gives you the final Markdown. Create the PR yourself
-(the skill won't open it for you).
+(the skill won't open it for you). Author mode never touches `gh` either; it only
+reads your local git history and diff.
+
+If the request is genuinely ambiguous ("review my changes before I open a PR" could
+mean either), the agent asks one clarifying question rather than guessing.
 
 ## Repository layout
 
 ```
 .
-├── SKILL.md                  # the skill definition + workflow
+├── SKILL.md                  # the skill definition + workflow for both modes
 ├── references/
 │   ├── html-visual.md        # HTML/CSS for the before/after panels + worked example
 │   ├── markdown-body.md      # GitHub callout/table conventions + worked example
-│   └── review-ui.md          # interactive review page: controls, submit JS, decisions schema
+│   ├── review-ui.md          # author mode's review page: controls, submit JS, decisions schema
+│   ├── reviewer-ui.md        # reviewer mode's annotation page: AI pre-seed policy, submit flow, decisions schema
+│   ├── annotation-schema.md  # data contracts: annotation objects, diff JSON, submission payload, fix-list
+│   └── github-posting.md     # gh preflight, pending-review collision check, posting, error table
+├── assets/
+│   └── review-template.html  # reviewer mode's annotation page (diff renderer + comment UI)
 ├── scripts/
-│   └── review_server.py      # live review server (stdlib): serves page, captures Submit, writes decisions
+│   ├── review_server.py      # live review server (stdlib): serves either page, captures Submit, writes decisions
+│   ├── diff_anchor.py        # parses PR file patches into hunks, validates comment anchors
+│   ├── build_review.py       # turns accepted annotations into a GitHub pending-review payload
+│   └── tests/                # unit tests for the anchoring, payload, and server logic
 ├── examples/
 │   ├── pr-body-thumbnails.md   # a generated Markdown PR body (generic scenario)
 │   └── pr-thumbnails.html      # the matching HTML visual (open in a browser)

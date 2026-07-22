@@ -2,18 +2,21 @@
 name: pr-narrative
 description: >
   Write pull-request descriptions that read like a clear explainer instead of a
-  code dump. Use this whenever the user asks to write, draft, generate, or improve
-  a PR description / PR body / PR write-up — or says things like "make a PR for
-  this branch", "write the PR", "describe these changes for review", or wants a PR
-  that explains the *why* and the *intuition* behind a change with a rich styled
-  before/after visual, callouts, and comparison tables. Produces TWO artifacts: a
-  self-contained styled HTML file (report-quality before/after panels, file chips,
-  callouts — like the explain-diff skill's visuals) saved outside the repo, AND a
-  GitHub-flavored Markdown PR body that fills the repo's PR template, leads with a
-  narrative Background + Description, uses GitHub [!NOTE]/[!TIP] callouts and
-  comparison tables, and links to the HTML for the rich visual. Deliberately avoids
-  mermaid diagrams, file-by-file changelogs, and method-name dumps. Do NOT use for
-  code review, confidence scores, commit messages, or release notes.
+  code dump, then review them interactively in the browser. Use this whenever the
+  user asks to write, draft, generate, review, or improve a PR description / PR body
+  / PR write-up — or says things like "make a PR for this branch", "write the PR",
+  "describe these changes for review", or wants a PR that explains the *why* and the
+  *intuition* behind a change with a rich styled before/after visual, callouts, and
+  comparison tables. Produces an interactive, self-contained HTML review page that
+  auto-opens in the browser (report-quality before/after panels + callouts like the
+  explain-diff skill's visuals, PLUS per-section Approve / Request-change controls
+  and a Download-decisions button), and a GitHub-flavored Markdown PR body that fills
+  the repo's PR template, leads with a narrative Background + Description, uses GitHub
+  [!NOTE]/[!TIP] callouts and comparison tables. The user reviews section by section
+  in the browser, exports their decisions, and the skill revises until every section
+  is approved. Deliberately avoids mermaid diagrams, file-by-file changelogs, and
+  method-name dumps. Do NOT use for code review scoring, commit messages, or release
+  notes.
 ---
 
 # PR Narrative
@@ -32,30 +35,44 @@ This skill produces that. It mirrors the look and feel of the `explain-diff` ski
 **Background** and **Intuition** — the styled panels, the callouts, the concrete toy
 data — but shaped for a PR.
 
-## What you produce — two artifacts
+## What you produce — an interactive review page + a Markdown body
 
-1. **A styled HTML file** (`/tmp/YYYY-MM-DD-pr-<branch>.html`) — self-contained,
-   inline CSS, no dependencies. This holds the *rich visual*: the report-quality
-   before/after panels (colored request rows, a red failure, an "extract locally"
-   step, little file chips), plus the Background and Description narrative. This is
-   the artifact that looks like the thing the user loves. Build it the same way
-   `explain-diff` builds its HTML: one clean page, styled panels, **no mermaid, no
-   ASCII diagrams** — use real HTML/CSS for the visuals.
+1. **An interactive HTML review page** (`/tmp/YYYY-MM-DD-pr-review-<branch>.html`) —
+   self-contained, inline CSS/JS, no server. This is the centerpiece and it **opens
+   automatically in the browser**. It holds the *rich visual* (report-quality
+   before/after panels — colored request rows, a red failure, an "extract" step,
+   little file chips — plus the Background and Description narrative, exactly the
+   look people love from `explain-diff`), and on top of that, each section carries an
+   **Approve / Request-change** control and a comment box, with a **Download
+   decisions** button. The user reviews section by section right in the page. Build
+   the visuals the same way `explain-diff` does: one clean page, styled panels, **no
+   mermaid, no ASCII diagrams**.
 
 2. **A Markdown PR body** (`/tmp/pr-body-<branch>.md`) — GitHub-flavored, fills the
    repo's PR template, and is *complete on its own*: a reviewer who never opens the
    HTML still gets the full narrative from the Markdown, using GitHub callouts and
-   comparison tables. It **links to the HTML file** for the rich before/after visual.
+   comparison tables. It **links to the review page** for the rich visual.
 
-Print the Markdown body inline at the end so the user can read/copy it immediately.
-Do **not** run `gh pr create` or open a PR unless the user explicitly asks — this
-skill produces the description; the user decides when to open the PR.
+Do **not** run `gh pr create` or open a PR — this skill produces (and helps the user
+review) the description; the user decides when to open the PR.
 
-For the exact HTML styling (CSS for the panels, request rows, badges, file chips,
-callouts) and a full worked example of both artifacts, read
-`references/html-visual.md`. Consult it whenever you build the HTML or want the
-quality bar. For the Markdown conventions (GitHub callout syntax, tables, template
-filling), read `references/markdown-body.md`.
+### The review loop (this is the point of the skill)
+
+The skill is not "generate and done" — it's a loop:
+
+**generate → auto-open review page → user approves/requests changes per section →
+user clicks Download decisions → agent reads the decisions file → revises the
+requested sections → re-open → repeat until everything is approved.**
+
+When every section is approved, finalize the Markdown body and hand it over (print it
+inline so the user can copy it). See `references/review-ui.md` for the exact
+interactive HTML (the per-section control bar, the JS that tracks decisions and
+exports `pr-review-decisions.json`, the decisions schema, and what to do after the
+user exports).
+
+For the visual styling itself (CSS for the panels, request rows, badges, file chips,
+callouts) read `references/html-visual.md`. For the Markdown conventions (GitHub
+callout syntax, tables, template filling) read `references/markdown-body.md`.
 
 ## What this skill is (and isn't)
 
@@ -106,12 +123,18 @@ Before writing, answer these in one or two sentences each:
 
 If you can't answer these, you don't understand the change yet — go back to step 1.
 
-### 3. Build the styled HTML visual
+### 3. Build the interactive review page and open it
 
-Create the self-contained HTML file with the report-quality before/after panels and
-the Background + Description narrative. Follow `references/html-visual.md` for the CSS
-and structure. Save to `/tmp/YYYY-MM-DD-pr-<branch>.html` (outside the repo, dated
-prefix so files stay time-sorted).
+Create the self-contained HTML review page: the report-quality before/after panels +
+Background/Description narrative (styling from `references/html-visual.md`), with each
+reviewable block wrapped in a `<section data-review-id="…">` carrying the Approve /
+Request-change control bar, plus the sticky action bar and the export JavaScript
+(all from `references/review-ui.md`). Set `<body data-branch="…">` so the exported
+decisions are tagged. Save to `/tmp/YYYY-MM-DD-pr-review-<branch>.html`.
+
+Then **open it automatically** (`open <file>` on macOS) and tell the user to review
+each section and click **Download decisions** when done. This is the moment the skill
+becomes interactive — don't just write the file and stop.
 
 ### 4. Write the Markdown body, filling the repo's template
 
@@ -122,11 +145,19 @@ onto this skill.
 
 Fill them with narrative, using GitHub `> [!NOTE]` / `> [!TIP]` callouts for
 definitions and edge cases, and Markdown comparison/benchmark tables for the
-before/after numbers. Near the top of the Description, link to the HTML file for the
-rich visual (e.g. *"See the visual before/after walkthrough: `<path>`"*). See
-`references/markdown-body.md` for conventions and a worked example.
+before/after numbers. Near the top of the Description, link to the review page. See
+`references/markdown-body.md` for conventions and a worked example. Save to
+`/tmp/pr-body-<branch>.md`.
 
-Save to `/tmp/pr-body-<branch>.md` and print it inline.
+### 5. Run the review loop
+
+After the user reviews in the browser and exports, read
+`~/Downloads/pr-review-decisions.json` (check for `pr-review-decisions (1).json` etc.
+if they exported more than once). If `overall` is `approved`, finalize and print the
+Markdown body inline. Otherwise, revise each `changes_requested` section per its
+comment, leave approved sections untouched, regenerate the review page, re-open it,
+and repeat until everything is approved. See `references/review-ui.md` for the
+decisions schema and the exact after-export behavior.
 
 ## Writing style
 
@@ -147,15 +178,19 @@ beginner. Respect their time: every sentence should give understanding they lack
 - **Cut anything the diff already says.** If a sentence just restates the diff, delete
   it unless the *reason* is interesting.
 
-## Quality bar — before you hand it over
+## Quality bar — before you open the review page
 
 Re-read both artifacts as if you were the reviewer:
 
 - Could a reviewer who's never seen this code understand *why* it exists from the
   Background alone?
 - Is the core idea stated in one clear sentence at the top of the Description?
-- Does the HTML have a genuinely helpful styled before/after visual (not decoration)?
-- Is the Markdown body complete on its own, and does it link to the HTML?
+- Does the review page have a genuinely helpful styled before/after visual (not
+  decoration), and does every reviewable section have its Approve / Request-change
+  control bar wired up?
+- Does the review page actually open in the browser, and does Download decisions
+  export valid `pr-review-decisions.json`?
+- Is the Markdown body complete on its own, and does it link to the review page?
 - Did you avoid a file-by-file listing and method-name dumps? (If you see "then I
   changed…" or "`someMethod()` does…", cut or rephrase to the idea level.)
 - Is the main trade-off named honestly?

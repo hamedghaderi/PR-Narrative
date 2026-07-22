@@ -15,17 +15,23 @@ PR.
 
 ## What it produces
 
-Two artifacts:
+Two artifacts, plus an interactive review loop:
 
-1. **A styled, self-contained HTML file** — the rich visual: report-quality
-   before/after panels (colored request rows, a red failure, an "extract locally"
-   step, file chips), plus the Background and Description narrative. Saved outside
-   your repo (e.g. `/tmp/YYYY-MM-DD-pr-<branch>.html`). No mermaid, no ASCII art —
+1. **An interactive HTML review page** — self-contained (inline CSS/JS, no server)
+   and it **opens automatically in your browser**. It shows the rich visual —
+   report-quality before/after panels (colored request rows, a red failure, an
+   "extract locally" step, file chips) and the Background/Description narrative — and
+   under each section adds **Approve / Request-change** controls and a comment box.
+   You review section by section and click **Download decisions**; the agent reads
+   that file and revises until every section is approved. No mermaid, no ASCII art —
    real HTML/CSS.
 2. **A GitHub-flavored Markdown PR body** — fills your repo's PR template, is complete
    on its own (a reviewer who never opens the HTML still gets the full story), uses
    GitHub `> [!NOTE]` / `> [!TIP]` callouts and comparison tables, and links to the
-   HTML for the rich visual.
+   review page for the rich visual.
+
+The loop is: **generate → auto-open review page → approve / request changes per
+section → download decisions → agent revises → re-open → repeat until approved.**
 
 It deliberately avoids **mermaid diagrams**, **file-by-file changelogs**, and
 **method-name dumps**. It never opens a PR for you — you get the files and decide when
@@ -100,9 +106,11 @@ Natural phrasings that trigger it:
 - "make a PR description for these changes"
 - "describe this change for review"
 
-The agent will read the diff against your base branch, understand the change, and
-produce the two artifacts. Review the Markdown, then create the PR yourself (the skill
-won't open it for you).
+The agent will read the diff against your base branch, understand the change, generate
+the review page and open it in your browser. Review each section (Approve / Request
+change), click **Download decisions**, and hand the file back; the agent revises until
+you've approved everything, then gives you the final Markdown. Create the PR yourself
+(the skill won't open it for you).
 
 ## Repository layout
 
@@ -111,7 +119,8 @@ won't open it for you).
 ├── SKILL.md                  # the skill definition + workflow
 ├── references/
 │   ├── html-visual.md        # HTML/CSS for the before/after panels + worked example
-│   └── markdown-body.md      # GitHub callout/table conventions + worked example
+│   ├── markdown-body.md      # GitHub callout/table conventions + worked example
+│   └── review-ui.md          # interactive review page: controls, export JS, decisions schema
 ├── examples/
 │   ├── pr-body-thumbnails.md   # a generated Markdown PR body (generic scenario)
 │   └── pr-thumbnails.html      # the matching HTML visual (open in a browser)

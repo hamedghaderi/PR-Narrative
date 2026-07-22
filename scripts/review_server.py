@@ -5,6 +5,13 @@ Serves an interactive PR review page and captures the reviewer's decisions the m
 they click Submit — no manual download/hand-back step. On submit it writes the
 decisions JSON to disk (where the agent reads it) and then shuts itself down.
 
+Two Submit payload shapes are accepted, discriminated by the presence of a `kind`
+field (see references/annotation-schema.md §3):
+  - author mode: `{ branch, generated_at, overall, sections }` — no `kind` field.
+  - reviewer mode: `{ kind: "review-annotations", ... }`.
+Both are written verbatim to --out and resolve the single-shot wait identically; the
+server only routes on `kind`, it does not interpret the annotation contents.
+
 Standard library only; no pip installs. Usage:
 
     python3 review_server.py --page /tmp/pr-review-<branch>.html \
@@ -38,6 +45,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LIVE_MARKER = '<meta name="pr-review-live" content="1">'
 
+MAX_BODY_BYTES = 5 * 1024 * 1024
+
 
 def build_handler(page_html: str, out_path: str, done_event: threading.Event):
     class Handler(BaseHTTPRequestHandler):
@@ -53,6 +62,19 @@ def build_handler(page_html: str, out_path: str, done_event: threading.Event):
             if body:
                 self.wfile.write(body)
 
+        def _reject_oversized(self):
+            # Drain the client's still-streaming body in bounded chunks first, so
+            # the 413 response reaches the client instead of racing a socket reset,
+            # then ask the client to close the (now-poisoned) connection.
+            remaining = int(self.headers.get("Content-Length", 0))
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 65536))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+            self.close_connection = True
+            self._send(413, b'{"error":"payload too large"}', "application/json")
+
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 self._send(200, page_html.encode("utf-8"), "text/html; charset=utf-8")
@@ -66,6 +88,9 @@ def build_handler(page_html: str, out_path: str, done_event: threading.Event):
                 self._send(404, b"not found")
                 return
             length = int(self.headers.get("Content-Length", 0))
+            if length > MAX_BODY_BYTES:
+                self._reject_oversized()
+                return
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 payload = json.loads(raw.decode("utf-8"))

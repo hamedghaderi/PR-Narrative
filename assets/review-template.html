@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR review — annotate diff</title>
+<style>
+  :root{
+    --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
+    --green-bg:#dafbe1; --green-border:#4ac26b; --green-text:#116329;
+    --red-bg:#ffebe9; --red-border:#ff8182; --red-text:#82071e;
+    --gray-bg:#eaeef2; --gray-text:#6e7781;
+    --amber-bg:#fff8c5; --amber-border:#d4a72c; --accent:#0969da;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px 20px 96px;background:#fff;color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 6px}
+  h2{font-size:19px;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h3{font-size:15px;margin:26px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  p{margin:0 0 14px}
+  .subtitle{color:var(--muted);font-size:14px;margin-bottom:4px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+
+  /* ---- mode banner ---- */
+  .mode-banner{border:1px solid var(--border);border-left:4px solid var(--accent);
+               background:#ddf4ff;border-radius:6px;padding:10px 16px;margin:0 0 18px;font-size:13.5px}
+  .mode-banner.local{border-left-color:var(--amber-border);background:var(--amber-bg)}
+  .mode-banner b{display:block;margin-bottom:2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+
+  /* ---- narrative panel (reused panel/callout look from html-visual.md) ---- */
+  .panel{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;margin:0 0 22px}
+  .panel-head{padding:10px 14px;font-weight:600;font-size:13.5px;border-bottom:1px solid var(--border);
+              background:var(--panel-bg);display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+  .panel-head .toggle{color:var(--muted);font-size:12px;margin-left:auto}
+  .panel-body{padding:14px 16px}
+  .panel.collapsed .panel-body{display:none}
+  .callout{border-left:4px solid var(--accent);background:#ddf4ff;padding:12px 16px;
+           border-radius:6px;margin:18px 0;font-size:14.5px}
+  .callout.tip{border-left-color:var(--green-border);background:var(--green-bg)}
+  .callout b{display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+
+  /* ---- diff file blocks ---- */
+  .file-block{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 16px;background:#fff}
+  .file-head{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-bg);
+             border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;user-select:none}
+  .file-head .fname{font-family:ui-monospace,monospace;font-weight:600;word-break:break-all}
+  .file-head .toggle{color:var(--muted);font-size:12px}
+  .file-head .counts{margin-left:auto;display:flex;gap:8px;align-items:center;font-family:ui-monospace,monospace;font-size:12px}
+  .file-head .adds{color:var(--green-text)} .file-head .dels{color:var(--red-text)}
+  .file-head .status-chip{border:1px solid var(--border);background:#fff;color:var(--muted);
+                          border-radius:999px;padding:1px 8px;font-size:11px;text-transform:capitalize}
+  .file-body{display:block}
+  .file-block.collapsed .file-body{display:none}
+  .file-actions{padding:8px 14px;border-bottom:1px solid var(--border);background:#fff}
+  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);
+       border-radius:7px;padding:5px 11px;background:var(--panel-bg);color:var(--ink)}
+  .btn:hover{background:var(--gray-bg)}
+  .btn.primary{border-color:var(--green-border);background:var(--green-bg);color:var(--green-text)}
+  .btn.danger{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
+  .btn.small{padding:3px 9px;font-size:11.5px}
+  .no-diff{padding:14px;color:var(--muted);font-size:13px;font-style:italic}
+
+  /* ---- diff lines ---- */
+  .hunk-header{font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);
+               background:#f1f8ff;padding:4px 14px;border-top:1px solid var(--border)}
+  .diff-line{display:flex;font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.5;cursor:pointer}
+  .diff-line:hover{background:#fff8c5aa}
+  .diff-line.selected{background:var(--amber-bg)}
+  .diff-line.add{background:var(--green-bg)} .diff-line.add.selected{background:#c3f0cd}
+  .diff-line.del{background:var(--red-bg)} .diff-line.del.selected{background:#ffd7d5}
+  .diff-line.context{background:#fff}
+  .gutter{flex:0 0 auto;width:44px;text-align:right;padding:0 6px;color:var(--gray-text);
+          user-select:none;border-right:1px solid var(--border)}
+  .marker{flex:0 0 auto;width:18px;text-align:center;color:var(--muted);user-select:none}
+  .ltext{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;padding-right:10px}
+
+  /* ---- annotations (inline) ---- */
+  .anno-list{padding:0 14px}
+  .anno{border:1px solid var(--border);border-radius:8px;margin:8px 0;padding:10px 12px;background:#fff;font-size:13px}
+  .anno .anno-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:12px;color:var(--muted)}
+  .anno .anno-body{white-space:pre-wrap;word-break:break-word}
+  .anno .anno-code{font-family:ui-monospace,monospace;font-size:12px;background:var(--panel-bg);
+                   border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px;
+                   white-space:pre-wrap;word-break:break-word}
+  .anno .anno-actions{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+  .anno.ai{border-style:dashed;border-color:var(--accent);background:#f6faff}
+  .anno.ai.discarded{display:none}
+  .anno.ai.accepted{border-style:solid;border-color:var(--green-border);background:var(--green-bg)}
+  .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;
+         font-weight:600;font-family:ui-monospace,monospace;border:1px solid}
+  .badge-ai{background:#ddf4ff;border-color:var(--accent);color:var(--accent)}
+  .badge-user{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
+  .chip{border-radius:6px;padding:1px 8px;font-size:11px;font-weight:600;border:1px solid}
+  .chip.important{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
+  .chip.nit{background:var(--amber-bg);border-color:var(--amber-border);color:#7a5c00}
+  .chip.pre_existing{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
+  .chip.type{background:var(--panel-bg);border-color:var(--border);color:var(--muted)}
+
+  /* ---- composer ---- */
+  .composer{border:1px solid var(--accent);border-radius:8px;margin:8px 0;padding:12px;background:#f6faff}
+  .composer .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12.5px}
+  .composer label{font-weight:600;color:var(--muted)}
+  .composer select,.composer textarea{font:inherit;font-size:13px;border:1px solid var(--border);
+                                       border-radius:7px;padding:6px 9px;background:#fff;color:var(--ink)}
+  .composer textarea{width:100%;min-height:60px;resize:vertical}
+  .composer textarea.code{font-family:ui-monospace,monospace;font-size:12.5px}
+  .composer .anchor-note{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace}
+  .composer .actions{display:flex;gap:8px;margin-top:6px}
+
+  /* ---- overflow ---- */
+  .overflow{border:1px dashed var(--border);border-radius:10px;padding:14px 16px;margin:0 0 16px;background:var(--panel-bg)}
+  .overflow h3{margin-top:0}
+  .overflow ul{margin:0;padding-left:18px} .overflow li{font-size:13px;margin:4px 0}
+  .overflow a{color:var(--accent);text-decoration:none} .overflow a:hover{text-decoration:underline}
+  .overflow .of-counts{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--muted);margin-left:6px}
+
+  /* ---- sticky footer ---- */
+  .footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);
+          padding:12px 20px;z-index:20;box-shadow:0 -2px 8px rgba(27,31,36,.06)}
+  .footer .inner{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .footer .counts-line{font-size:13px;color:var(--muted)}
+  .footer .counts-line b{color:var(--ink)}
+  .footer .general{flex:1 1 260px;min-width:220px}
+  .footer .general textarea{width:100%;min-height:40px;resize:vertical;font:inherit;font-size:13px;
+                            border:1px solid var(--border);border-radius:7px;padding:6px 9px}
+  .footer .footer-btns{display:flex;gap:8px;margin-left:auto}
+  .footer button{font:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:8px;padding:9px 16px}
+  #submit-btn{border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text)}
+  #download-btn{border:1px solid var(--border);background:var(--panel-bg);color:var(--ink)}
+  #submit-btn:disabled{opacity:.6;cursor:default}
+  @media (max-width:600px){body{padding:16px 12px 140px}.footer .footer-btns{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="subtitle">Pull request · reviewer mode</div>
+  <h1 id="page-title">PR review</h1>
+
+  <div id="mode-banner" class="mode-banner"></div>
+
+  <section class="panel" id="narrative-panel">
+    <div class="panel-head" data-toggle="narrative-panel">
+      <span>Narrative — why this change exists</span>
+      <span class="toggle">▾ collapse</span>
+    </div>
+    <div class="panel-body">
+      <div id="narrative">__NARRATIVE_HTML__</div>
+    </div>
+  </section>
+
+  <h2>Diff</h2>
+  <div id="files"></div>
+  <div id="overflow"></div>
+
+</div>
+
+<div class="footer">
+  <div class="inner">
+    <div class="counts-line" id="counts-line">
+      <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <b id="c-warn">0</b> warnings
+    </div>
+    <div class="general">
+      <textarea id="general-comment" placeholder="General review comment (optional)…"></textarea>
+    </div>
+    <div class="footer-btns">
+      <button id="download-btn" type="button">⬇ Download annotations</button>
+      <button id="submit-btn" type="button">Submit review</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  ============================ INJECTION POINTS ============================
+  The agent replaces exactly two markers when it builds a page from this
+  template (each marker appears once, and only once, in this file):
+    1. The REVIEW-DATA marker inside the script#review-data tag below — the T1
+       "Diff JSON contract" object (references/annotation-schema.md §2).
+    2. The NARRATIVE-HTML marker inside div#narrative above — the pre-rendered
+       narrative HTML fragment.
+  ========================================================================
+
+  sample data
+  -----------
+  To test this template standalone (no agent, no server):
+    1. Copy this file:  cp assets/review-template.html /tmp/review-standalone.html
+    2. In the copy, overwrite the REVIEW-DATA marker (the placeholder text inside
+       the script#review-data tag) with the T1 worked-example Diff JSON from
+       references/annotation-schema.md §2 ("Worked example — diff JSON").
+    3. Overwrite the NARRATIVE-HTML marker (inside div#narrative) with any HTML
+       fragment, e.g. the narrativeHtml string from that same §2 example.
+    4. Serve the folder and open the copy in a browser:
+         cd /tmp && python3 -m http.server 8000
+         then visit  127.0.0.1:8000/review-standalone.html
+
+  The §2 example renders two files (src/utils/formatDate.js and
+  src/utils/formatDate.test.js), one overflow file, and one AI draft (a-2) that
+  appears inline with an "AI draft" badge, a dashed border, an "important"
+  severity chip, and Accept / Edit / Discard buttons. It starts EXCLUDED
+  (accepted:false) so the footer reads "0 of 1 AI drafts accepted" until you
+  click Accept.
+-->
+<script id="review-data" type="application/json">__REVIEW_DATA__</script>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA;
+  try {
+    DATA = JSON.parse(document.getElementById("review-data").textContent);
+  } catch (e) {
+    DATA = null;
+  }
+  if (!DATA || typeof DATA !== "object") {
+    DATA = {
+      mode: "local", repo: null, prNumber: null, prUrl: null,
+      branch: "unknown-branch", headRefOid: null,
+      files: [], overflowFiles: [], aiAnnotations: []
+    };
+  }
+  var files = Array.isArray(DATA.files) ? DATA.files : [];
+  var overflowFiles = Array.isArray(DATA.overflowFiles) ? DATA.overflowFiles : [];
+
+  var isLive = !!document.querySelector('meta[name="pr-review-live"]');
+
+  // Reviewer-namespaced key ONLY — must never collide with author mode's "pr-review:<branch>".
+  var STORE_KEY;
+  if (DATA.mode === "pr" && DATA.repo != null && DATA.prNumber != null) {
+    STORE_KEY = "pr-review:reviewer:" + DATA.repo + "/" + DATA.prNumber;
+  } else {
+    STORE_KEY = "pr-review:reviewer:local:" + (DATA.branch || "unknown-branch");
+  }
+
+  var userAnnotations = [];
+  var aiAnnotations = [];
+  var generalComment = "";
+  var idCounter = 1;
+
+  function seedFromData() {
+    (DATA.aiAnnotations || []).forEach(function (a) {
+      // AI drafts default EXCLUDED (accepted:false) unless the injected data set it true.
+      aiAnnotations.push({
+        id: a.id != null ? a.id : nextId(),
+        scope: a.scope, type: a.type, filePath: a.filePath,
+        lineStart: a.lineStart, lineEnd: a.lineEnd, side: a.side,
+        body: a.body || "", suggestedCode: a.suggestedCode,
+        origin: "ai", accepted: a.accepted === true,
+        severity: a.severity, reasoning: a.reasoning,
+        _discarded: false
+      });
+    });
+  }
+
+  function nextId() { return "u-" + (idCounter++); }
+
+  function loadDraft() {
+    var raw;
+    try { raw = localStorage.getItem(STORE_KEY); } catch (e) { raw = null; }
+    if (!raw) return;
+    var saved;
+    try { saved = JSON.parse(raw); } catch (e) { return; }
+    if (!saved || typeof saved !== "object") return;
+    if (Array.isArray(saved.userAnnotations)) userAnnotations = saved.userAnnotations;
+    if (typeof saved.generalComment === "string") generalComment = saved.generalComment;
+    if (saved.aiState && typeof saved.aiState === "object") {
+      aiAnnotations.forEach(function (a) {
+        var st = saved.aiState[a.id];
+        if (st) {
+          if (typeof st.accepted === "boolean") a.accepted = st.accepted;
+          if (typeof st._discarded === "boolean") a._discarded = st._discarded;
+          if (typeof st.body === "string") a.body = st.body;
+          if (typeof st.suggestedCode === "string") a.suggestedCode = st.suggestedCode;
+        }
+      });
+    }
+    if (typeof saved.idCounter === "number" && saved.idCounter > idCounter) {
+      idCounter = saved.idCounter;
+    }
+  }
+
+  function saveDraft() {
+    var aiState = {};
+    aiAnnotations.forEach(function (a) {
+      aiState[a.id] = {
+        accepted: a.accepted, _discarded: a._discarded,
+        body: a.body, suggestedCode: a.suggestedCode
+      };
+    });
+    var payload = {
+      userAnnotations: userAnnotations,
+      aiState: aiState,
+      generalComment: generalComment,
+      idCounter: idCounter
+    };
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(payload)); } catch (e) {}
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function fileKey(name) { return "file:" + name; }
+
+  function renderBanner() {
+    var b = document.getElementById("mode-banner");
+    var title = document.getElementById("page-title");
+    if (DATA.mode === "pr") {
+      b.className = "mode-banner";
+      b.innerHTML = "<b>PR mode</b>Submitting creates a PENDING review on GitHub — you finalize the verdict there.";
+      var label = (DATA.repo || "") + (DATA.prNumber != null ? " #" + DATA.prNumber : "");
+      title.textContent = "Review " + (label.trim() || "pull request");
+    } else {
+      b.className = "mode-banner local";
+      b.innerHTML = "<b>Local mode</b>Annotations return to the agent as a fix-list — nothing is posted.";
+      title.textContent = "Review branch " + (DATA.branch || "");
+    }
+  }
+
+  var filesRoot = document.getElementById("files");
+
+  function renderFiles() {
+    filesRoot.innerHTML = "";
+    if (!files.length) {
+      filesRoot.appendChild(el("p", "no-diff", "No files to render."));
+      return;
+    }
+    files.forEach(function (f) { filesRoot.appendChild(renderFile(f)); });
+  }
+
+  function renderFile(f) {
+    var block = el("div", "file-block");
+    block.dataset.file = f.filename;
+
+    var head = el("div", "file-head");
+    head.appendChild(el("span", "toggle", "▾"));
+    head.appendChild(el("span", "fname", f.filename));
+    var counts = el("span", "counts");
+    counts.appendChild(el("span", "status-chip", f.status || "modified"));
+    counts.appendChild(el("span", "adds", "+" + (f.additions || 0)));
+    counts.appendChild(el("span", "dels", "-" + (f.deletions || 0)));
+    head.appendChild(counts);
+    head.addEventListener("click", function (ev) {
+      block.classList.toggle("collapsed");
+      head.querySelector(".toggle").textContent = block.classList.contains("collapsed") ? "▸" : "▾";
+    });
+    block.appendChild(head);
+
+    var body = el("div", "file-body");
+    var actions = el("div", "file-actions");
+    var fileBtn = el("button", "btn small", "+ File-level comment");
+    fileBtn.addEventListener("click", function () { openComposer(body, null, f.filename, null); });
+    actions.appendChild(fileBtn);
+    body.appendChild(actions);
+
+    if (f.truncated || !Array.isArray(f.hunks) || !f.hunks.length) {
+      body.appendChild(el("div", "no-diff", "No diff to render (binary, too large, or rename-only)."));
+    } else {
+      f.hunks.forEach(function (h) { body.appendChild(renderHunk(f, h)); });
+    }
+    var anchor = el("div", "anno-list");
+    anchor.dataset.fileAnchor = f.filename;
+    body.appendChild(anchor);
+
+    block.appendChild(body);
+    return block;
+  }
+
+  var selection = null; // { fileEl, filename, side, lines:[{line,text,el}] }
+
+  function renderHunk(f, h) {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", "hunk-header", h.header || ""));
+    (h.lines || []).forEach(function (ln) {
+      var row = el("div", "diff-line " + (ln.kind || "context"));
+      var side = ln.kind === "del" ? "LEFT" : "RIGHT";
+      var num = ln.kind === "del" ? ln.oldLine : ln.newLine;
+      row.dataset.filename = f.filename;
+      row.dataset.side = side;
+      row.dataset.line = num == null ? "" : String(num);
+
+      var gOld = el("span", "gutter", ln.oldLine == null ? "" : String(ln.oldLine));
+      var gNew = el("span", "gutter", ln.newLine == null ? "" : String(ln.newLine));
+      var marker = el("span", "marker", ln.kind === "add" ? "+" : ln.kind === "del" ? "-" : " ");
+      var text = el("span", "ltext", ln.text != null ? ln.text : "");
+      row.appendChild(gOld); row.appendChild(gNew); row.appendChild(marker); row.appendChild(text);
+
+      row.addEventListener("mousedown", function (ev) { beginSelect(f, row, ev); });
+      row.addEventListener("mouseenter", function (ev) { extendSelect(f, row, ev); });
+      row.addEventListener("mouseup", function (ev) { endSelect(f, row); });
+      frag.appendChild(row);
+    });
+    return frag;
+  }
+
+  var dragging = false;
+  function clearSelectionEls() {
+    Array.prototype.forEach.call(document.querySelectorAll(".diff-line.selected"),
+      function (n) { n.classList.remove("selected"); });
+  }
+  function beginSelect(f, row, ev) {
+    if (row.dataset.line === "") return; // no anchorable number
+    dragging = true;
+    clearSelectionEls();
+    selection = { filename: f.filename, side: row.dataset.side, rows: [row] };
+    row.classList.add("selected");
+  }
+  function extendSelect(f, row, ev) {
+    if (!dragging || !selection) return;
+    if (f.filename !== selection.filename) return;
+    if (row.dataset.side !== selection.side) return; // stay on one side
+    if (row.dataset.line === "") return;
+    if (selection.rows.indexOf(row) === -1) {
+      selection.rows.push(row);
+      row.classList.add("selected");
+    }
+  }
+  function endSelect(f, row) {
+    if (!dragging) {
+      if (row.dataset.line === "") return;
+      clearSelectionEls();
+      selection = { filename: f.filename, side: row.dataset.side, rows: [row] };
+      row.classList.add("selected");
+    }
+    dragging = false;
+    if (!selection || !selection.rows.length) return;
+    openComposerForSelection();
+  }
+
+  function selectionLineRange() {
+    var nums = selection.rows.map(function (r) { return parseInt(r.dataset.line, 10); })
+      .filter(function (n) { return !isNaN(n); }).sort(function (a, b) { return a - b; });
+    return { start: nums[0], end: nums[nums.length - 1] };
+  }
+  function selectionText() {
+    return selection.rows
+      .slice()
+      .sort(function (a, b) { return parseInt(a.dataset.line, 10) - parseInt(b.dataset.line, 10); })
+      .map(function (r) { return r.querySelector(".ltext").textContent; })
+      .join("\n");
+  }
+
+  function openComposerForSelection() {
+    var range = selectionLineRange();
+    var lastRow = selection.rows[selection.rows.length - 1];
+    openComposer(
+      lastRow.parentNode === filesRoot ? lastRow : findFileBody(selection.filename),
+      { start: range.start, end: range.end, side: selection.side, seedText: selectionText() },
+      selection.filename,
+      lastRow
+    );
+  }
+
+  function findFileBody(filename) {
+    var block = filesRoot.querySelector('.file-block[data-file="' + cssEscape(filename) + '"]');
+    return block ? block.querySelector(".file-body") : filesRoot;
+  }
+  function cssEscape(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+  function openComposer(container, lineInfo, filename, insertAfter, editing) {
+    var existing = document.querySelector(".composer");
+    if (existing) existing.remove();
+
+    var c = el("div", "composer");
+
+    var scope = lineInfo ? "line" : "file";
+    var row1 = el("div", "row");
+    var typeLabel = el("label", null, "Type");
+    var typeSel = document.createElement("select");
+    ["comment", "suggestion", "concern"].forEach(function (t) {
+      var o = document.createElement("option"); o.value = t; o.textContent = t; typeSel.appendChild(o);
+    });
+    row1.appendChild(typeLabel); row1.appendChild(typeSel);
+
+    var anchorNote = el("span", "anchor-note");
+    if (lineInfo) {
+      var rangeStr = lineInfo.start === lineInfo.end ? String(lineInfo.start)
+        : lineInfo.start + "-" + lineInfo.end;
+      anchorNote.textContent = filename + " : line " + rangeStr + " (" + lineInfo.side + ")";
+    } else {
+      anchorNote.textContent = filename + " : file-level comment";
+    }
+    row1.appendChild(anchorNote);
+    c.appendChild(row1);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = "Your comment (markdown)…";
+    c.appendChild(ta);
+
+    var codeTa = document.createElement("textarea");
+    codeTa.className = "code";
+    codeTa.placeholder = "Suggested replacement code…";
+    codeTa.style.display = "none";
+    if (lineInfo && lineInfo.seedText != null) codeTa.value = lineInfo.seedText;
+    c.appendChild(codeTa);
+
+    typeSel.addEventListener("change", function () {
+      codeTa.style.display = typeSel.value === "suggestion" ? "block" : "none";
+    });
+    if (editing) {
+      typeSel.value = editing.type || "comment";
+      ta.value = editing.body || "";
+      if (editing.type === "suggestion") {
+        codeTa.style.display = "block";
+        codeTa.value = editing.suggestedCode || "";
+      }
+    }
+
+    var actions = el("div", "actions");
+    var saveBtn = el("button", "btn primary small", editing ? "Save" : "Add comment");
+    var cancelBtn = el("button", "btn small", "Cancel");
+    actions.appendChild(saveBtn); actions.appendChild(cancelBtn);
+    c.appendChild(actions);
+
+    cancelBtn.addEventListener("click", function () { c.remove(); clearSelectionEls(); });
+
+    saveBtn.addEventListener("click", function () {
+      var body = ta.value.trim();
+      if (!body && typeSel.value !== "suggestion") { ta.focus(); return; }
+      var type = typeSel.value;
+      var suggestedCode = type === "suggestion" ? codeTa.value : undefined;
+
+      if (editing && editing.origin === "ai") {
+        // Editing an AI draft: update it in place and mark accepted.
+        editing.type = type;
+        editing.body = body;
+        editing.suggestedCode = suggestedCode;
+        editing.accepted = true;
+        editing._discarded = false;
+      } else if (editing) {
+        editing.type = type;
+        editing.body = body;
+        editing.suggestedCode = suggestedCode;
+      } else {
+        var anno = {
+          id: nextId(),
+          scope: scope,
+          type: type,
+          filePath: filename,
+          lineStart: lineInfo ? lineInfo.start : null,
+          lineEnd: lineInfo ? lineInfo.end : null,
+          side: lineInfo ? lineInfo.side : null,
+          body: body,
+          origin: "user",
+          accepted: true
+        };
+        if (type === "suggestion") anno.suggestedCode = suggestedCode;
+        userAnnotations.push(anno);
+      }
+      c.remove();
+      clearSelectionEls();
+      saveDraft();
+      renderAnnotations();
+      renderCounts();
+    });
+
+    if (insertAfter && insertAfter.parentNode) {
+      insertAfter.parentNode.insertBefore(c, insertAfter.nextSibling);
+    } else {
+      container.appendChild(c);
+    }
+    ta.focus();
+  }
+
+  function renderAnnotations() {
+    Array.prototype.forEach.call(document.querySelectorAll(".anno"), function (n) { n.remove(); });
+
+    var all = aiAnnotations.concat(userAnnotations);
+    all.forEach(function (a) {
+      if (a.origin === "ai" && a._discarded) return;
+      var node = buildAnnoNode(a);
+      placeAnno(a, node);
+    });
+  }
+
+  function placeAnno(a, node) {
+    if (a.scope === "general") return; // general lives in footer only
+    var container = findAnnoContainer(a);
+    if (container) container.appendChild(node);
+  }
+
+  function findAnnoContainer(a) {
+    if (!a.filePath) return null;
+    var block = filesRoot.querySelector('.file-block[data-file="' + cssEscape(a.filePath) + '"]');
+    if (!block) return null;
+    if (a.scope === "line" && a.lineStart != null) {
+      var rows = block.querySelectorAll('.diff-line[data-side="' + a.side + '"]');
+      var target = null;
+      for (var i = 0; i < rows.length; i++) {
+        if (parseInt(rows[i].dataset.line, 10) === a.lineEnd) { target = rows[i]; break; }
+      }
+      if (target) {
+        var holder = el("div", "anno-list");
+        target.parentNode.insertBefore(holder, target.nextSibling);
+        return holder;
+      }
+    }
+    return block.querySelector('.anno-list[data-file-anchor="' + cssEscape(a.filePath) + '"]');
+  }
+
+  function buildAnnoNode(a) {
+    var cls = "anno " + (a.origin === "ai" ? "ai" : "user");
+    if (a.origin === "ai" && a.accepted) cls += " accepted";
+    var n = el("div", cls);
+    n.dataset.annoId = a.id;
+
+    var meta = el("div", "anno-meta");
+    if (a.origin === "ai") {
+      meta.appendChild(badge("badge badge-ai", "AI draft"));
+      if (a.severity) meta.appendChild(chip("chip " + a.severity, a.severity));
+    } else {
+      meta.appendChild(badge("badge badge-user", "you"));
+    }
+    meta.appendChild(chip("chip type", a.type));
+    if (a.scope === "line" && a.lineStart != null) {
+      var rangeStr = a.lineStart === a.lineEnd ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
+      meta.appendChild(el("span", null, "line " + rangeStr + " (" + a.side + ")"));
+    } else if (a.scope === "file") {
+      meta.appendChild(el("span", null, "file-level"));
+    }
+    n.appendChild(meta);
+
+    n.appendChild(el("div", "anno-body", a.body || ""));
+    if (a.type === "suggestion" && a.suggestedCode != null) {
+      n.appendChild(el("div", "anno-code", a.suggestedCode));
+    }
+    if (a.origin === "ai" && a.reasoning) {
+      var r = el("div", "anno-meta");
+      r.appendChild(el("em", null, "Why flagged: " + a.reasoning));
+      n.appendChild(r);
+    }
+
+    var actions = el("div", "anno-actions");
+    if (a.origin === "ai") {
+      var acceptBtn = el("button", "btn small primary", a.accepted ? "✓ Accepted" : "Accept");
+      acceptBtn.addEventListener("click", function () {
+        a.accepted = !a.accepted;
+        saveDraft(); renderAnnotations(); renderCounts();
+      });
+      var editBtn = el("button", "btn small", "Edit");
+      editBtn.addEventListener("click", function () {
+        openComposer(n.parentNode, annoLineInfo(a), a.filePath, n, a);
+      });
+      var discardBtn = el("button", "btn small danger", "Discard");
+      discardBtn.addEventListener("click", function () {
+        a._discarded = true; a.accepted = false;
+        saveDraft(); renderAnnotations(); renderCounts();
+      });
+      actions.appendChild(acceptBtn); actions.appendChild(editBtn); actions.appendChild(discardBtn);
+    } else {
+      var uEdit = el("button", "btn small", "Edit");
+      uEdit.addEventListener("click", function () {
+        openComposer(n.parentNode, annoLineInfo(a), a.filePath, n, a);
+      });
+      var uDel = el("button", "btn small danger", "Delete");
+      uDel.addEventListener("click", function () {
+        var idx = userAnnotations.indexOf(a);
+        if (idx !== -1) userAnnotations.splice(idx, 1);
+        saveDraft(); renderAnnotations(); renderCounts();
+      });
+      actions.appendChild(uEdit); actions.appendChild(uDel);
+    }
+    n.appendChild(actions);
+    return n;
+  }
+
+  function annoLineInfo(a) {
+    if (a.scope !== "line") return null;
+    return { start: a.lineStart, end: a.lineEnd, side: a.side, seedText: a.suggestedCode };
+  }
+
+  function badge(cls, txt) { return el("span", cls, txt); }
+  function chip(cls, txt) { return el("span", cls, txt); }
+
+  function renderOverflow() {
+    var root = document.getElementById("overflow");
+    root.innerHTML = "";
+    if (!overflowFiles.length) return;
+    var box = el("div", "overflow");
+    box.appendChild(el("h3", null, overflowFiles.length + " more file" +
+      (overflowFiles.length === 1 ? "" : "s") + " — view on GitHub"));
+    var ul = document.createElement("ul");
+    overflowFiles.forEach(function (of) {
+      var li = document.createElement("li");
+      if (of.url) {
+        var a = document.createElement("a");
+        a.href = of.url; a.textContent = of.filename;
+        a.target = "_blank"; a.rel = "noopener noreferrer";
+        li.appendChild(a);
+      } else {
+        li.appendChild(el("span", "mono", of.filename));
+      }
+      li.appendChild(el("span", "of-counts",
+        "  +" + (of.additions || 0) + " -" + (of.deletions || 0)));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    root.appendChild(box);
+  }
+
+  function renderCounts() {
+    var userCount = userAnnotations.length;
+    var aiTotal = aiAnnotations.filter(function (a) { return !a._discarded; }).length;
+    var aiAccepted = aiAnnotations.filter(function (a) { return a.accepted && !a._discarded; }).length;
+    var warnings = countUnanchored();
+    document.getElementById("c-user").textContent = String(userCount);
+    document.getElementById("c-ai").textContent = aiAccepted + " of " + aiTotal;
+    document.getElementById("c-warn").textContent = String(warnings);
+  }
+
+  function countUnanchored() {
+    var all = userAnnotations.concat(aiAnnotations.filter(function (a) { return !a._discarded; }));
+    var n = 0;
+    all.forEach(function (a) {
+      if (a.scope !== "line" || a.filePath == null) return;
+      var block = filesRoot.querySelector('.file-block[data-file="' + cssEscape(a.filePath) + '"]');
+      if (!block) { n++; return; }
+      var rows = block.querySelectorAll('.diff-line[data-side="' + a.side + '"]');
+      var found = false;
+      for (var i = 0; i < rows.length; i++) {
+        if (parseInt(rows[i].dataset.line, 10) === a.lineEnd) { found = true; break; }
+      }
+      if (!found) n++;
+    });
+    return n;
+  }
+
+  function buildPayload() {
+    // Every annotation in current state: user-authored + AI drafts (accepted flag
+    // reflects triage). Discarded AI drafts are excluded entirely. Filtering to
+    // accepted:true happens downstream in build_review.py, not here.
+    var annotations = [];
+    userAnnotations.forEach(function (a) { annotations.push(stripInternal(a)); });
+    aiAnnotations.forEach(function (a) { if (!a._discarded) annotations.push(stripInternal(a)); });
+    return {
+      kind: "review-annotations",
+      mode: DATA.mode,
+      repo: DATA.repo != null ? DATA.repo : null,
+      prNumber: DATA.prNumber != null ? DATA.prNumber : null,
+      branch: DATA.branch,
+      generalComment: generalComment,
+      annotations: annotations
+    };
+  }
+
+  function stripInternal(a) {
+    var out = {
+      id: a.id, scope: a.scope, type: a.type, filePath: a.filePath,
+      lineStart: a.lineStart != null ? a.lineStart : null,
+      lineEnd: a.lineEnd != null ? a.lineEnd : null,
+      side: a.side != null ? a.side : null,
+      body: a.body || "", origin: a.origin, accepted: a.accepted === true
+    };
+    if (a.type === "suggestion" && a.suggestedCode != null) out.suggestedCode = a.suggestedCode;
+    if (a.origin === "ai") {
+      if (a.severity != null) out.severity = a.severity;
+      if (a.reasoning != null) out.reasoning = a.reasoning;
+    }
+    return out;
+  }
+
+  var submitBtn = document.getElementById("submit-btn");
+  var downloadBtn = document.getElementById("download-btn");
+  if (!isLive) submitBtn.style.display = "none"; // no server → download only
+
+  submitBtn.addEventListener("click", function () {
+    var payload = buildPayload();
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending…";
+    fetch("/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      submitBtn.textContent = "✓ Sent — you can close this tab";
+    }).catch(function () {
+      // Server gone? Fall back to a download so the review isn't lost.
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit review";
+      download(payload);
+    });
+  });
+
+  downloadBtn.addEventListener("click", function () { download(buildPayload()); });
+
+  function download(payload) {
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pr-annotations.json";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  var generalTa = document.getElementById("general-comment");
+  generalTa.addEventListener("input", function () {
+    generalComment = generalTa.value; saveDraft();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-toggle]"), function (h) {
+    h.addEventListener("click", function () {
+      var panel = document.getElementById(h.dataset.toggle);
+      panel.classList.toggle("collapsed");
+      var t = h.querySelector(".toggle");
+      if (t) t.textContent = panel.classList.contains("collapsed") ? "▸ expand" : "▾ collapse";
+    });
+  });
+
+  seedFromData();
+  loadDraft();
+  renderBanner();
+  renderFiles();
+  renderOverflow();
+  renderAnnotations();
+  generalTa.value = generalComment;
+  renderCounts();
+})();
+</script>
+</body>
+</html>

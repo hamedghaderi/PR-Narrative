@@ -1,5 +1,7 @@
 # pr-narrative
 
+[![Install with npx skills](https://img.shields.io/badge/npx%20skills%20add-hamedghaderi%2FPR--Review-black?logo=npm)](https://github.com/vercel-labs/skills)
+
 An agent skill that writes **pull-request descriptions that read like a clear
 explainer instead of a code dump.**
 
@@ -73,14 +75,44 @@ badges and file chips.
 
 ## Installation
 
-This is an agent skill (a `SKILL.md` plus reference files). Install it by copying the
-skill folder into your agent's skills directory.
+This is an agent skill (a `SKILL.md` plus reference files). The easiest way to install
+it is with the [`skills` CLI](https://github.com/vercel-labs/skills) — a package
+manager for agent skills that uses GitHub as its registry and supports Claude Code,
+OpenCode, Cursor, Codex, and [70+ more agents](https://github.com/vercel-labs/skills#supported-agents).
 
-**Clone and copy:**
+**One command (recommended):**
 
 ```bash
-git clone git@github.com:hamedghaderi/PR-Review.git
-# then copy the skill files into your skills directory as a folder named "pr-narrative"
+npx skills add hamedghaderi/PR-Review
+```
+
+That's it. The CLI clones the repo, finds the `pr-narrative` skill, detects your agent,
+and installs it to the right directory. No SSH keys, no manual copying.
+
+Useful variants:
+
+```bash
+# Preview the skill before installing
+npx skills add hamedghaderi/PR-Review --list
+
+# Install to specific agents
+npx skills add hamedghaderi/PR-Review -a opencode -a claude-code
+
+# Install globally (user-level) and skip prompts
+npx skills add hamedghaderi/PR-Review -g -y
+
+# Copy files instead of symlinking (more portable)
+npx skills add hamedghaderi/PR-Review --copy
+```
+
+<details>
+<summary><strong>Manual install (clone and copy)</strong></summary>
+
+If you'd rather not use the CLI, clone the repo and copy the skill folder into your
+agent's skills directory:
+
+```bash
+git clone https://github.com/hamedghaderi/PR-Review.git
 ```
 
 Pick the location your agent uses:
@@ -97,6 +129,8 @@ cp -R PR-Review/SKILL.md PR-Review/references ~/.claude/skills/pr-narrative/
 
 Only `SKILL.md` and `references/` are needed for the skill to work; `examples/` is
 just for reference.
+
+</details>
 
 ## Usage
 

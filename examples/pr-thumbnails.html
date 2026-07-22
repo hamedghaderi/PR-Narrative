@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR Visual — Batch thumbnail downloads via CDN bundle</title>
+<style>
+  :root {
+    --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
+    --green-bg:#dafbe1; --green-border:#4ac26b; --green-text:#116329;
+    --red-bg:#ffebe9; --red-border:#ff8182; --red-text:#82071e;
+    --gray-bg:#eaeef2; --gray-text:#6e7781;
+    --amber-bg:#fff8c5; --amber-border:#d4a72c; --accent:#0969da;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px 20px 80px;background:#fff;color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:880px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:19px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h3{font-size:15px;margin:26px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  p{margin:0 0 14px}
+  .subtitle{color:var(--muted);font-size:14px;margin-bottom:4px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;
+         font-weight:600;font-family:ui-monospace,monospace;border:1px solid}
+  .badge-200{background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)}
+  .badge-429{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
+  .badge-skip{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
+  .callout{border-left:4px solid var(--accent);background:#ddf4ff;padding:12px 16px;
+           border-radius:6px;margin:18px 0;font-size:14.5px}
+  .callout.tip{border-left-color:var(--green-border);background:var(--green-bg)}
+  .callout b{display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .visual-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:20px 0 8px}
+  @media (max-width:720px){.visual-grid{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff}
+  .panel-head{padding:10px 14px;font-weight:600;font-size:13.5px;border-bottom:1px solid var(--border)}
+  .panel-head.before{background:#fff1f0;color:var(--red-text)}
+  .panel-head.after{background:var(--green-bg);color:var(--green-text)}
+  .panel-body{padding:12px 14px}
+  .req-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+           padding:5px 0;font-size:12.5px}
+  .req-row .path{font-family:ui-monospace,monospace}
+  .req-row.dim{opacity:.45}
+  .note-inline{font-size:12px;color:var(--red-text);margin:6px 0;font-style:italic}
+  .step-box{margin:12px 0;padding:10px 12px;background:var(--panel-bg);
+            border:1px dashed var(--border);border-radius:8px;font-size:12.5px;text-align:center}
+  .step-box .arrow-in{font-size:16px;color:var(--muted);margin-bottom:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .chip{border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text);
+        border-radius:6px;padding:3px 8px;font-family:ui-monospace,monospace;font-size:11.5px}
+  .chip.more{border-color:var(--border);background:var(--gray-bg);color:var(--gray-text)}
+  .chip.miss{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
+  .fallback-box{margin-top:10px;padding:9px 12px;background:var(--amber-bg);
+                border:1px solid var(--amber-border);border-radius:8px;font-size:12.5px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{background:var(--panel-bg)}
+</style>
+</head>
+<body><div class="wrap">
+
+<div class="subtitle">Pull request · visual companion</div>
+<h1>Batch thumbnail downloads via a CDN bundle endpoint</h1>
+
+<h2>Background (Why?)</h2>
+<p>
+  The catalog service builds product thumbnails by downloading each image from our CDN
+  one at a time. That's fine for a single product page, but it falls apart for bulk
+  jobs: rebuilding a whole category, or importing a new supplier's catalog, means
+  asking the CDN for an image every single time, one HTTP request after another.
+</p>
+<p>
+  The CDN rate-limits that pattern. Past a certain number of requests in a short window
+  it starts answering with <span class="badge badge-429">429</span>, and the rebuild
+  aborts partway through the category, leaving thumbnails half-generated with no easy
+  way to know where it stopped.
+</p>
+
+<div class="callout">
+  <b>The core idea</b>
+  The CDN stores images in per-category folders and can hand back the whole folder as
+  one <span class="mono">.zip</span> via a <span class="mono">?bundle</span> endpoint.
+  So instead of asking for each image one at a time, ask for the category once, unpack
+  it locally, and only fall back to individual requests for whatever the archive didn't
+  have.
+</div>
+
+<h3>Before → After</h3>
+<div class="visual-grid">
+
+  <div class="panel">
+    <div class="panel-head before">Before — one GET per image</div>
+    <div class="panel-body">
+      <div class="req-row"><span class="path">GET <b>shoes/img-001</b>.jpg</span><span class="badge badge-200">200</span></div>
+      <div class="req-row"><span class="path">GET <b>shoes/img-002</b>.jpg</span><span class="badge badge-200">200</span></div>
+      <div class="req-row"><span class="path">GET <b>shoes/img-003</b>.jpg</span><span class="badge badge-200">200</span></div>
+      <div class="req-row"><span class="path">GET <b>shoes/img-004</b>.jpg</span><span class="badge badge-200">200</span></div>
+      <div class="req-row"><span class="path">GET <b>shoes/img-005</b>.jpg</span><span class="badge badge-200">200</span></div>
+      <div class="req-row"><span class="path">GET <b>shoes/img-006</b>.jpg</span><span class="badge badge-429">429</span></div>
+      <div class="note-inline">Rate limited — rebuild throws, remaining 39 images never requested</div>
+      <div class="req-row dim"><span class="path">GET <b>shoes/img-007</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
+      <div class="req-row dim"><span class="path">GET <b>shoes/img-008</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
+      <div class="req-row dim"><span class="path">… 37 more never attempted</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head after">After — one GET per category folder</div>
+    <div class="panel-body">
+      <div class="req-row"><span class="path">GET <b>/shoes</b>?bundle</span><span class="badge badge-200">200</span></div>
+
+      <div class="step-box">
+        <div class="arrow-in">↓</div>
+        Unpack locally — the <span class="mono">.zip</span> becomes an in-memory
+        <span class="mono">id → image bytes</span> map, no further network calls
+      </div>
+
+      <div class="chips">
+        <span class="chip">img-001.jpg</span>
+        <span class="chip">img-002.jpg</span>
+        <span class="chip">img-003.jpg</span>
+        <span class="chip more">+40 more matched</span>
+        <span class="chip miss">img-019.jpg — missing</span>
+      </div>
+
+      <div class="fallback-box">
+        <b>Fallback (1 image):</b> not found in the archive → individually requested with
+        the original per-image download, same as before this change.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="callout tip">
+  <b>Why a threshold, not always-bundle</b>
+  Bundle mode only kicks in once a job asks for more than 2 images. A 1–2 image request
+  — the per-page case — isn't worth building and unpacking a <span class="mono">.zip</span>
+  for, so it keeps using plain per-image requests exactly as before. Nothing about the
+  single-page path changes.
+</div>
+
+<h2>By the numbers</h2>
+<table>
+  <tr><th>Scenario</th><th>Requests before</th><th>Requests after</th></tr>
+  <tr><td>Single product page (1 image)</td><td>1</td><td>1 (unchanged)</td></tr>
+  <tr><td>Category rebuild (45 images, one folder)</td><td>45</td><td>1</td></tr>
+  <tr><td>Supplier import (spanning 3 folders)</td><td>~135</td><td>3</td></tr>
+</table>
+
+<div class="callout">
+  <b>Trade-off</b>
+  Unpacking a folder's <span class="mono">.zip</span> reads every image in that category
+  into memory before picking out the ones actually requested. Our folders are small
+  enough that this is comfortable today; worth watching if a folder ever grows unusually
+  large.
+</div>
+
+</div></body></html>

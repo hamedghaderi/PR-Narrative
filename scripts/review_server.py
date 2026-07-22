@@ -18,6 +18,14 @@ the process exits. Poll --out for the decisions file; its presence means "done".
 The page is served with a `<meta name="pr-review-live" content="1">` marker injected,
 which flips the page into live-POST mode (see references/review-ui.md). Without the
 server, the same page still works via its Download-decisions fallback.
+
+Security note: this server binds to 127.0.0.1 (loopback) only, on purpose. That is the
+trust boundary — the reviewer typing comments is the local operator who launched the
+skill, so the decisions JSON is first-party input. Do NOT change the bind address to
+0.0.0.0 or expose it beyond localhost: doing so would let a *different* person's
+free-text comments flow into the agent's revision instructions (indirect prompt
+injection). The agent treats comments as untrusted feedback data regardless (see
+SKILL.md), but keeping the socket loopback-only is the primary guard.
 """
 
 import argparse

@@ -1,6 +1,6 @@
 # pr-narrative
 
-[![Install with npx skills](https://img.shields.io/badge/npx%20skills%20add-hamedghaderi%2FPR--Review-black?logo=npm)](https://github.com/vercel-labs/skills)
+[![Install with npx skills](https://img.shields.io/badge/npx%20skills%20add-hamedghaderi%2Fpr--narrative-black?logo=npm)](https://github.com/vercel-labs/skills)
 
 An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
 the descriptions for the ones you open yourself.**
@@ -149,7 +149,7 @@ OpenCode, Cursor, Codex, and [70+ more agents](https://github.com/vercel-labs/sk
 **One command (recommended):**
 
 ```bash
-npx skills add hamedghaderi/PR-Review
+npx skills add hamedghaderi/pr-narrative
 ```
 
 That's it. The CLI clones the repo, finds the `pr-narrative` skill, detects your agent,
@@ -159,16 +159,16 @@ Useful variants:
 
 ```bash
 # Preview the skill before installing
-npx skills add hamedghaderi/PR-Review --list
+npx skills add hamedghaderi/pr-narrative --list
 
 # Install to specific agents
-npx skills add hamedghaderi/PR-Review -a opencode -a claude-code
+npx skills add hamedghaderi/pr-narrative -a opencode -a claude-code
 
 # Install globally (user-level) and skip prompts
-npx skills add hamedghaderi/PR-Review -g -y
+npx skills add hamedghaderi/pr-narrative -g -y
 
 # Copy files instead of symlinking (more portable)
-npx skills add hamedghaderi/PR-Review --copy
+npx skills add hamedghaderi/pr-narrative --copy
 ```
 
 <details>
@@ -178,7 +178,7 @@ If you'd rather not use the CLI, clone the repo and copy the skill folder into y
 agent's skills directory:
 
 ```bash
-git clone https://github.com/hamedghaderi/PR-Review.git
+git clone https://github.com/hamedghaderi/pr-narrative.git
 ```
 
 Pick the location your agent uses:
@@ -186,11 +186,11 @@ Pick the location your agent uses:
 ```bash
 # OpenCode / .agents-style skills:
 mkdir -p ~/.agents/skills/pr-narrative
-cp -R PR-Review/SKILL.md PR-Review/references ~/.agents/skills/pr-narrative/
+cp -R pr-narrative/SKILL.md pr-narrative/references ~/.agents/skills/pr-narrative/
 
 # Claude Code / .claude-style skills:
 mkdir -p ~/.claude/skills/pr-narrative
-cp -R PR-Review/SKILL.md PR-Review/references ~/.claude/skills/pr-narrative/
+cp -R pr-narrative/SKILL.md pr-narrative/references ~/.claude/skills/pr-narrative/
 ```
 
 Only `SKILL.md` and `references/` are needed for the skill to work; `examples/` is

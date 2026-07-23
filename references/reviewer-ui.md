@@ -77,12 +77,27 @@ import json
 page = open("/tmp/pr-review-build.html").read()
 diff_json = json.load(open("/tmp/pr-{n}-diff.json"))
 
-page = page.replace("__REVIEW_DATA__", json.dumps(diff_json))
+# "</" -> "<\/": a diff line containing "</script>" would otherwise close the
+# script#review-data element at HTML-parse time. JSON.parse reads "<\/" back
+# as "</", so the data round-trips unchanged.
+page = page.replace("__REVIEW_DATA__", json.dumps(diff_json).replace("</", "<\\/"))
 page = page.replace("__NARRATIVE_HTML__", diff_json["narrativeHtml"])
 
 open("/tmp/2026-07-22-pr-annotate-{r}-{n}.html", "w").write(page)
 PYEOF
 ```
+
+> [!IMPORTANT]
+> The `.replace("</", "<\\/")` on the dumped JSON is load-bearing, not defensive
+> fluff. The diff JSON embeds the reviewed diff's own lines, and any diff that
+> touches a file containing a literal `</script>` (an HTML view with an inline
+> script, a JS template, docs) would otherwise terminate the
+> `script#review-data` element early at HTML-parse time — the rest of the JSON
+> spills into the page as visible text and the UI falls back to "No files to
+> render". `<\/` is a standard JSON escape for `/`, so `JSON.parse` returns the
+> identical data. And if you're re-building a page to fix exactly this: restart
+> `review_server.py` afterwards — it reads the page file once at startup, so
+> rewriting the file alone changes nothing.
 
 Save the finished page to:
 

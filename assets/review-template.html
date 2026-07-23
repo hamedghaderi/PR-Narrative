@@ -178,6 +178,10 @@
   template (each marker appears once, and only once, in this file):
     1. The REVIEW-DATA marker inside the script#review-data tag below — the T1
        "Diff JSON contract" object (references/annotation-schema.md §2).
+       Escape "</" as "<\/" in the dumped JSON (json.dumps(...).replace("</",
+       "<\\/")): a diff containing "</script>" would otherwise close that
+       script element at HTML-parse time and truncate the data
+       (references/reviewer-ui.md §1).
     2. The NARRATIVE-HTML marker inside div#narrative above — the pre-rendered
        narrative HTML fragment.
   ========================================================================

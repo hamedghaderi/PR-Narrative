@@ -117,6 +117,20 @@ category once and unpack it locally.
 The HTML companion renders the same before/after as styled panels with `200`/`429`
 badges and file chips.
 
+## See it in action
+
+The Markdown above pairs with a live, interactive review page, not a static mockup:
+
+![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
+The full page in the browser: narrative panels, a green "Approved" status pill on the
+Background section, "2 / 4 reviewed" progress, and a `429` badge from the rate-limit
+story.
+
+![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
+The "Before → After" section in its amber "Changes requested" state, with a reviewer
+comment already filled in below the control bar. This is the per-section
+Approve / Request-change loop in action, one verdict at a time before Submit.
+
 ## Installation
 
 This is an agent skill (a `SKILL.md` plus reference files). The easiest way to install
@@ -231,7 +245,9 @@ mean either), the agent asks one clarifying question rather than guessing.
 │   └── tests/                # unit tests for the anchoring, payload, and server logic
 ├── examples/
 │   ├── pr-body-thumbnails.md   # a generated Markdown PR body (generic scenario)
-│   └── pr-thumbnails.html      # the matching HTML visual (open in a browser)
+│   ├── pr-thumbnails.html      # the matching HTML visual (open in a browser)
+│   ├── pr-review-demo.html     # interactive review-page demo (for README screenshots)
+│   └── screenshots/            # hero-review-page.png, section-controls.png (README screenshots)
 ├── README.md
 └── LICENSE
 ```

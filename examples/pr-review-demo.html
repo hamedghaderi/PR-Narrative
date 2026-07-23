@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR Review — Batch thumbnail downloads via CDN bundle</title>
+<style>
+  :root {
+    --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
+    --green-bg:#dafbe1; --green-border:#4ac26b; --green-text:#116329;
+    --red-bg:#ffebe9; --red-border:#ff8182; --red-text:#82071e;
+    --gray-bg:#eaeef2; --gray-text:#6e7781;
+    --amber-bg:#fff8c5; --amber-border:#d4a72c; --accent:#0969da;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 20px 80px;background:#fff;color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:880px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:19px;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h3{font-size:15px;margin:26px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  p{margin:0 0 14px}
+  .subtitle{color:var(--muted);font-size:14px;margin-bottom:4px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  .pagehead{padding:40px 0 8px}
+
+  /* --- visual companion styling (from html-visual.md) --- */
+  .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;
+         font-weight:600;font-family:ui-monospace,monospace;border:1px solid}
+  .badge-200{background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)}
+  .badge-429{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
+  .badge-skip{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
+  .callout{border-left:4px solid var(--accent);background:#ddf4ff;padding:12px 16px;
+           border-radius:6px;margin:18px 0;font-size:14.5px}
+  .callout.tip{border-left-color:var(--green-border);background:var(--green-bg)}
+  .callout b{display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .visual-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:20px 0 8px}
+  @media (max-width:720px){.visual-grid{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff}
+  .panel-head{padding:10px 14px;font-weight:600;font-size:13.5px;border-bottom:1px solid var(--border)}
+  .panel-head.before{background:#fff1f0;color:var(--red-text)}
+  .panel-head.after{background:var(--green-bg);color:var(--green-text)}
+  .panel-body{padding:12px 14px}
+  .req-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+           padding:5px 0;font-size:12.5px}
+  .req-row .path{font-family:ui-monospace,monospace}
+  .req-row.dim{opacity:.45}
+  .note-inline{font-size:12px;color:var(--red-text);margin:6px 0;font-style:italic}
+  .step-box{margin:12px 0;padding:10px 12px;background:var(--panel-bg);
+            border:1px dashed var(--border);border-radius:8px;font-size:12.5px;text-align:center}
+  .step-box .arrow-in{font-size:16px;color:var(--muted);margin-bottom:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .chip{border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text);
+        border-radius:6px;padding:3px 8px;font-family:ui-monospace,monospace;font-size:11.5px}
+  .chip.more{border-color:var(--border);background:var(--gray-bg);color:var(--gray-text)}
+  .chip.miss{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
+  .fallback-box{margin-top:10px;padding:9px 12px;background:var(--amber-bg);
+                border:1px solid var(--amber-border);border-radius:8px;font-size:12.5px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{background:var(--panel-bg)}
+
+  /* --- review control bar (from review-ui.md) --- */
+  .review-section{border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin:18px 0;background:#fff}
+  .review-section.is-approved{border-color:var(--green-border);box-shadow:0 0 0 1px var(--green-border) inset}
+  .review-section.is-changes{border-color:var(--amber-border);box-shadow:0 0 0 1px var(--amber-border) inset}
+  .review-section > h2{margin-top:0}
+  .review-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px;
+              padding-top:12px;border-top:1px dashed var(--border)}
+  .review-bar button{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+                     border:1px solid var(--border);border-radius:7px;padding:6px 12px;background:#f6f8fa}
+  .rv-approve.on{background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)}
+  .rv-changes.on{background:var(--amber-bg);border-color:var(--amber-border);color:#7a5c00}
+  .rv-status{font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--gray-bg);color:var(--gray-text)}
+  .rv-status[data-status="approved"]{background:var(--green-bg);color:var(--green-text)}
+  .rv-status[data-status="changes_requested"]{background:var(--amber-bg);color:#7a5c00}
+  .rv-comment{flex-basis:100%;margin-top:8px;min-height:44px;resize:vertical;
+              font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:7px}
+  /* sticky summary/export bar */
+  .review-actionbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:14px;
+                    background:#fff;border-bottom:1px solid var(--border);padding:12px 0;margin-bottom:8px}
+  .review-actionbar .progress{font-size:13px;color:var(--muted)}
+  .review-actionbar button{margin-left:auto;font:inherit;font-size:13px;font-weight:700;cursor:pointer;
+                    border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text);
+                    border-radius:8px;padding:8px 16px}
+  .review-actionbar button.secondary{margin-left:0;border-color:var(--border);background:#f6f8fa;color:var(--ink)}
+</style>
+</head>
+<body data-branch="feat/thumbnail-cdn-bundle">
+
+<div class="review-actionbar">
+  <div class="wrap" style="display:flex;align-items:center;gap:14px;width:100%">
+    <strong>PR review</strong>
+    <span class="progress" id="rv-progress">0 / N reviewed</span>
+    <button class="secondary" id="rv-reset" type="button">Reset</button>
+    <button id="rv-submit" type="button">Submit</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div class="pagehead">
+  <div class="subtitle">Pull request · interactive review</div>
+  <h1>Batch thumbnail downloads via a CDN bundle endpoint</h1>
+</div>
+
+<!-- ============ SECTION: Background ============ -->
+<section class="review-section" data-review-id="background" data-review-label="Background (Why?)">
+  <h2>Background (Why?)</h2>
+  <p>
+    The catalog service builds product thumbnails by downloading each image from our CDN
+    one at a time. That's fine for a single product page, but it falls apart for bulk
+    jobs: rebuilding a whole category, or importing a new supplier's catalog, means
+    asking the CDN for an image every single time, one HTTP request after another.
+  </p>
+  <p>
+    The CDN rate-limits that pattern. Past a certain number of requests in a short window
+    it starts answering with <span class="badge badge-429">429</span>, and the rebuild
+    aborts partway through the category, leaving thumbnails half-generated with no easy
+    way to know where it stopped.
+  </p>
+
+  <div class="review-bar">
+    <button class="rv-approve">✓ Approve</button>
+    <button class="rv-changes">✎ Request change</button>
+    <span class="rv-status" data-status="pending">Pending</span>
+    <textarea class="rv-comment" placeholder="Optional comment (required if requesting a change)…"></textarea>
+  </div>
+</section>
+
+<!-- ============ SECTION: Description ============ -->
+<section class="review-section" data-review-id="description" data-review-label="Description (How?)">
+  <h2>Description (How?)</h2>
+  <div class="callout">
+    <b>The core idea</b>
+    The CDN stores images in per-category folders and can hand back the whole folder as
+    one <span class="mono">.zip</span> via a <span class="mono">?bundle</span> endpoint.
+    So instead of asking for each image one at a time, ask for the category once, unpack
+    it locally, and only fall back to individual requests for whatever the archive didn't
+    have.
+  </div>
+  <div class="callout tip">
+    <b>Why a threshold, not always-bundle</b>
+    Bundle mode only kicks in once a job asks for more than 2 images. A 1–2 image request
+    — the per-page case — isn't worth building and unpacking a <span class="mono">.zip</span>
+    for, so it keeps using plain per-image requests exactly as before. Nothing about the
+    single-page path changes.
+  </div>
+
+  <div class="review-bar">
+    <button class="rv-approve">✓ Approve</button>
+    <button class="rv-changes">✎ Request change</button>
+    <span class="rv-status" data-status="pending">Pending</span>
+    <textarea class="rv-comment" placeholder="Optional comment (required if requesting a change)…"></textarea>
+  </div>
+</section>
+
+<!-- ============ SECTION: Before/After Visual ============ -->
+<section class="review-section" data-review-id="visual" data-review-label="Before/After visual">
+  <h2>Before → After</h2>
+  <div class="visual-grid">
+
+    <div class="panel">
+      <div class="panel-head before">Before — one GET per image</div>
+      <div class="panel-body">
+        <div class="req-row"><span class="path">GET <b>shoes/img-001</b>.jpg</span><span class="badge badge-200">200</span></div>
+        <div class="req-row"><span class="path">GET <b>shoes/img-002</b>.jpg</span><span class="badge badge-200">200</span></div>
+        <div class="req-row"><span class="path">GET <b>shoes/img-003</b>.jpg</span><span class="badge badge-200">200</span></div>
+        <div class="req-row"><span class="path">GET <b>shoes/img-004</b>.jpg</span><span class="badge badge-200">200</span></div>
+        <div class="req-row"><span class="path">GET <b>shoes/img-005</b>.jpg</span><span class="badge badge-200">200</span></div>
+        <div class="req-row"><span class="path">GET <b>shoes/img-006</b>.jpg</span><span class="badge badge-429">429</span></div>
+        <div class="note-inline">Rate limited — rebuild throws, remaining 39 images never requested</div>
+        <div class="req-row dim"><span class="path">GET <b>shoes/img-007</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
+        <div class="req-row dim"><span class="path">GET <b>shoes/img-008</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
+        <div class="req-row dim"><span class="path">… 37 more never attempted</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head after">After — one GET per category folder</div>
+      <div class="panel-body">
+        <div class="req-row"><span class="path">GET <b>/shoes</b>?bundle</span><span class="badge badge-200">200 → shoes.zip</span></div>
+
+        <div class="step-box">
+          <div class="arrow-in">↓</div>
+          Unpack locally — the <span class="mono">.zip</span> becomes an in-memory
+          <span class="mono">id → image bytes</span> map, no further network calls
+        </div>
+
+        <div class="chips">
+          <span class="chip">img-001.jpg</span>
+          <span class="chip">img-002.jpg</span>
+          <span class="chip">img-003.jpg</span>
+          <span class="chip more">+40 more matched</span>
+          <span class="chip miss">img-019.jpg — missing</span>
+        </div>
+
+        <div class="fallback-box">
+          <b>Fallback (1 image):</b> not found in the archive → individually requested with
+          the original per-image download, same as before this change.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="review-bar">
+    <button class="rv-approve">✓ Approve</button>
+    <button class="rv-changes">✎ Request change</button>
+    <span class="rv-status" data-status="pending">Pending</span>
+    <textarea class="rv-comment" placeholder="Optional comment (required if requesting a change)…"></textarea>
+  </div>
+</section>
+
+<!-- ============ SECTION: Trade-offs ============ -->
+<section class="review-section" data-review-id="tradeoff" data-review-label="Trade-offs">
+  <h2>Trade-offs & by the numbers</h2>
+  <table>
+    <tr><th>Scenario</th><th>Requests before</th><th>Requests after</th></tr>
+    <tr><td>Single product page (1 image)</td><td>1</td><td>1 (unchanged)</td></tr>
+    <tr><td>Category rebuild (45 images, one folder)</td><td>45</td><td>1</td></tr>
+    <tr><td>Supplier import (spanning 3 folders)</td><td>~135</td><td>3</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Trade-off</b>
+    Unpacking a folder's <span class="mono">.zip</span> reads every image in that category
+    into memory before picking out the ones actually requested. Our folders are small
+    enough that this is comfortable today; worth watching if a folder ever grows unusually
+    large.
+  </div>
+
+  <div class="review-bar">
+    <button class="rv-approve">✓ Approve</button>
+    <button class="rv-changes">✎ Request change</button>
+    <span class="rv-status" data-status="pending">Pending</span>
+    <textarea class="rv-comment" placeholder="Optional comment (required if requesting a change)…"></textarea>
+  </div>
+</section>
+
+</div>
+
+<!-- Seed a partially-reviewed state BEFORE the main script hydrates from localStorage.
+     Per review-ui.md, the main IIFE reads state from localStorage keyed by branch,
+     so writing it here makes apply() paint the approved + changes-requested sections. -->
+<script>
+(function () {
+  var branch = document.body.dataset.branch || "unknown-branch";
+  var storeKey = "pr-review:" + branch;
+  var seeded = {
+    "background": { decision: "approved", comment: "" },
+    "visual": {
+      decision: "changes_requested",
+      comment: "Mention the CDN concurrency limit here so reviewers know the retry budget."
+    }
+  };
+  try { localStorage.setItem(storeKey, JSON.stringify(seeded)); } catch (e) {}
+})();
+</script>
+
+<script>
+(function () {
+  const branch = document.body.dataset.branch || "unknown-branch";
+  const sections = Array.from(document.querySelectorAll(".review-section"));
+  const storeKey = "pr-review:" + branch;
+  const isLive = !!document.querySelector('meta[name="pr-review-live"]');
+
+  const state = JSON.parse(localStorage.getItem(storeKey) || "{}");
+
+  function save() { localStorage.setItem(storeKey, JSON.stringify(state)); }
+
+  function apply(sec) {
+    const id = sec.dataset.reviewId;
+    const s = state[id] || { decision: "pending", comment: "" };
+    const approve = sec.querySelector(".rv-approve");
+    const changes = sec.querySelector(".rv-changes");
+    const status  = sec.querySelector(".rv-status");
+    const comment = sec.querySelector(".rv-comment");
+    approve.classList.toggle("on", s.decision === "approved");
+    changes.classList.toggle("on", s.decision === "changes_requested");
+    sec.classList.toggle("is-approved", s.decision === "approved");
+    sec.classList.toggle("is-changes", s.decision === "changes_requested");
+    status.dataset.status = s.decision;
+    status.textContent = s.decision === "approved" ? "Approved"
+                       : s.decision === "changes_requested" ? "Changes requested"
+                       : "Pending";
+    if (document.activeElement !== comment) comment.value = s.comment || "";
+  }
+
+  function updateProgress() {
+    const reviewed = sections.filter(sec => {
+      const s = state[sec.dataset.reviewId];
+      return s && s.decision !== "pending";
+    }).length;
+    document.getElementById("rv-progress").textContent = reviewed + " / " + sections.length + " reviewed";
+  }
+
+  sections.forEach(sec => {
+    const id = sec.dataset.reviewId;
+    if (!state[id]) state[id] = { decision: "pending", comment: "" };
+    sec.querySelector(".rv-approve").addEventListener("click", () => {
+      state[id].decision = state[id].decision === "approved" ? "pending" : "approved";
+      save(); apply(sec); updateProgress();
+    });
+    sec.querySelector(".rv-changes").addEventListener("click", () => {
+      state[id].decision = state[id].decision === "changes_requested" ? "pending" : "changes_requested";
+      save(); apply(sec); updateProgress();
+    });
+    sec.querySelector(".rv-comment").addEventListener("input", (e) => {
+      state[id].comment = e.target.value; save();
+    });
+    apply(sec);
+  });
+  updateProgress();
+
+  document.getElementById("rv-reset").addEventListener("click", () => {
+    if (!confirm("Clear all review decisions?")) return;
+    Object.keys(state).forEach(k => delete state[k]);
+    sections.forEach(sec => { state[sec.dataset.reviewId] = { decision: "pending", comment: "" }; apply(sec); });
+    save(); updateProgress();
+  });
+
+  function buildPayload() {
+    const decisions = sections.map(sec => ({
+      id: sec.dataset.reviewId,
+      label: sec.dataset.reviewLabel || sec.dataset.reviewId,
+      decision: (state[sec.dataset.reviewId] || {}).decision || "pending",
+      comment: (state[sec.dataset.reviewId] || {}).comment || ""
+    }));
+    const anyChanges = decisions.some(d => d.decision === "changes_requested");
+    const allApproved = decisions.every(d => d.decision === "approved");
+    return {
+      branch: branch,
+      generated_at: new Date().toISOString(),
+      overall: anyChanges ? "changes_requested" : allApproved ? "approved" : "pending",
+      sections: decisions
+    };
+  }
+
+  const submitBtn = document.getElementById("rv-submit");
+  submitBtn.textContent = isLive ? "Submit review" : "⬇ Download decisions";
+
+  submitBtn.addEventListener("click", async () => {
+    const payload = buildPayload();
+    if (isLive) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+      try {
+        const res = await fetch("/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        submitBtn.textContent = "✓ Sent — you can close this tab";
+      } catch (e) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "⬇ Download decisions (server unreachable)";
+        download(payload);
+      }
+      return;
+    }
+    download(payload);
+  });
+
+  function download(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pr-review-decisions.json";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>
+
+</body></html>

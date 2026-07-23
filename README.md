@@ -18,14 +18,16 @@ land as a **pending** GitHub review, one you finalize yourself, on github.com, b
 clicking Approve, Request changes, or Comment. Reviewing a local branch produces the
 same page but posts nothing; Submit hands you back a fix-list instead.
 
-**Author mode** is the original pitch, unchanged: it writes **pull-request
-descriptions that read like a clear explainer instead of a code dump.** Most PR
-descriptions are written for the author, not the reviewer — they list which files
-changed and restate the diff in prose the reviewer can already see. This mode does the
-opposite: it gives the reviewer the *context* and the *mental model* they need before
-they read a single line of the diff. It answers **"why does this change exist?"** and
-**"what's the core idea?"**, using a styled before/after visual, small concrete
-examples, and comparison tables.
+**Author mode** is the original pitch, sharpened by a code-first doctrine: it writes
+**pull-request descriptions as a short story sourced from the diff, not paraphrased
+from the ticket** — one a reviewer who's never read the ticket, including a junior
+developer on the team, can follow in a single read. Most PR descriptions are written
+for the author, not the reviewer — they list which files changed and restate the diff
+in prose the reviewer can already see. This mode does the opposite: it gives the
+reviewer the *context* and the *mental model* they need before they read a single line
+of the diff, with every claim traceable back to the diff itself. It answers **"why
+does this change exist?"** and **"what's the core idea?"**, using a styled before/after
+visual, small concrete examples, and comparison tables.
 
 Both modes share the same narrative discipline (a Background/Description panel, no
 mermaid diagrams, no method-name dumps) and both stop short of the final action:
@@ -98,20 +100,25 @@ comparison table:
 ```markdown
 ## Background (Why?)
 
-The catalog service downloads product thumbnails from the CDN one at a time. That's
-fine for a single page, but bulk jobs — rebuilding a whole category — issue one HTTP
-request per image, and the CDN rate-limits that pattern with `429`.
+The catalog service builds product thumbnails by asking the CDN for one image at a
+time: a single request per thumbnail. That works fine on a product page, where only
+one image is ever needed, but a category rebuild asks for every image in that
+category back to back, with nothing pacing the requests out.
 
 ## Description (How?)
 
-The core idea: the CDN can hand back a whole category folder as one `.zip` via a
-`?bundle` endpoint. So instead of asking for each image one at a time, ask for the
-category once and unpack it locally.
+The CDN can also hand back an entire category as a single `.zip`, through a
+`?bundle` endpoint. So instead of requesting each image on its own, the rebuild now
+asks for the category once, unpacks the archive locally, and only reaches for the old
+per-image request when something didn't make it into the bundle.
 
-| Scenario                    | Requests before | Requests after |
-| --------------------------- | --------------- | -------------- |
-| Single product page (1 img) | 1               | 1 (unchanged)  |
-| Category rebuild (45 imgs)  | 45              | 1              |
+For a category with 45 images:
+
+| | Before | After |
+|---|---|---|
+| Requests to the CDN | 45 (one per image) | 1 bundle plus rare fallbacks |
+| Where it fails | Aborts on the ~6th request (`429`) | Completes; only genuinely missing images fall back |
+| Images actually built | 5 of 45 | 45 of 45 |
 ```
 
 The HTML companion renders the same before/after as styled panels with `200`/`429`

@@ -4,6 +4,14 @@ The Markdown body fills the repo's PR template and is complete on its own: a rev
 who never opens the HTML still gets the full narrative from GitHub-rendered Markdown.
 It links to the HTML file for the rich before/after visual.
 
+Write it as a short story a reviewer can follow without outside context, not a
+paraphrase of the ticket. Assume the reader hasn't read the ticket or the commit
+message, and might be a junior developer on the team: they need every technical fact
+that matters, just not the assumed background you already carry in your head. Every
+claim in the Background and Description should trace back to the diff or to code you
+actually read. The ticket is there to fact-check names and numbers, never to lift
+sentences from.
+
 All example content here uses a generic, invented scenario (batching image downloads
 through a CDN bundle endpoint) purely to show the shape. Replace it with the real
 change.
@@ -84,15 +92,23 @@ exact section headers and checklists. Many templates use a "why / how" shape —
 example a template with `## Background (Why?)` and `## Description (How?)` maps
 directly onto this skill:
 
-- **Background / Why** → the problem + the system before. Lead with the pain in
-  concrete terms. Add a `> [!NOTE]` for any key definition. End with `Closes #xxxx`
-  if there's a linked issue.
-- **Description / How** → the one-sentence core idea, the link to the HTML visual, the
-  before/after in prose + a comparison table, and the honest trade-off. **No
-  method-name dumps, no file-by-file listing.**
+- **Background / Why** → tell it as a small scene: what the system does today, what
+  concretely goes wrong, and why that actually hurts someone. Pull every detail from
+  the diff or from code you've read, not from the ticket; the ticket is only there to
+  check you got a name or a number right. Write for a reviewer who hasn't seen the
+  ticket and might be junior: keep the technical facts, drop the assumed context. Add
+  a `> [!NOTE]` for any term a newcomer would trip on. End with `Closes #xxxx` if
+  there's a linked issue. If the story fits in one line, one line is enough; don't pad
+  it into paragraphs it doesn't need.
+- **Description / How** → open with the one-sentence core idea, in plain words, then
+  show what things look like now that it's fixed. Link to the HTML visual, walk the
+  before/after in a sentence or two plus a comparison table, and name the trade-off
+  honestly. **No method-name dumps, no file-by-file listing.** One idea per
+  paragraph; if a paragraph is doing two jobs, split it.
 - **Affected areas / models** (if the template has it) → a *short* bulleted list of
   surfaces, not files.
-- **Testing / QA** → plus, when useful, a couple of concrete things to check.
+- **Testing / QA** → a couple of concrete things worth checking, not a checklist for
+  its own sake.
 
 If the branch bundles unrelated work, add a brief `### Also bundled in this branch`
 list under the Description and say so honestly, rather than pretending it's one story.
@@ -117,6 +133,9 @@ itself.
 ## 6. Full worked example
 
 A finished Markdown body for the generic thumbnail-batching change lives alongside this
-reference at `examples/pr-body-thumbnails.md`. Notice what it does *not* contain: no
-file list, no method names — just the idea, a visual link, a table, and an honest
-trade-off. Read it as the quality bar, then write the real one the same way.
+reference at `examples/pr-body-thumbnails.md`. It reads like something a teammate told
+you at your desk, not like the ticket read back to you: every fact in it traces to the
+diff, and it's written for someone who never opened that ticket. Notice what it does
+*not* contain: no file list, no method names, just the scene, the idea, a visual link,
+a table, and an honest trade-off. Read it as the quality bar, then write the real one
+the same way.

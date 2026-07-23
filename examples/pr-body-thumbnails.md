@@ -1,79 +1,61 @@
 ## Background (Why?)
 
-The catalog service builds product thumbnails by downloading each product image from
-our CDN, one at a time. That's fine for a single product page, but it falls apart for
-bulk jobs: rebuilding thumbnails for a whole category, or importing a new supplier's
-catalog, means issuing one HTTP request per image, back to back.
+The catalog service builds product thumbnails by asking the CDN for one image at a
+time: a single request per thumbnail. That works fine on a product page, where only
+one image is ever needed, but a category rebuild asks for every image in that
+category back to back, with nothing pacing the requests out.
 
-The CDN rate-limits that pattern. Past a certain number of requests in a short window
-it starts answering with `429`, and the rebuild throws partway through the category,
-leaving thumbnails half-generated with no easy way to tell where it stopped.
-
-> [!NOTE]
-> This only affects **bulk jobs** (category rebuilds, supplier imports). The per-page
-> thumbnail fetch was never at risk — the problem only shows up once a job asks for
-> more than a handful of images at once.
+Fire off 45 of those requests in a row and the CDN pushes back. Around the sixth
+request it starts returning `429`, and the rebuild just stops where it is. The other
+39 images are never even requested, and there's no retry, no resume, just a category
+stuck at 5 thumbnails out of 45 with no record of where it gave up.
 
 ## Description (How?)
 
-The core idea: the CDN stores images in per-category folders and can hand back a whole
-folder as a single `.zip` via a `?bundle` endpoint. So instead of asking for each
-image one request at a time, we ask for the category once, unpack it locally, and only
-fall back to individual per-image requests for whatever the archive didn't contain.
+The CDN can also hand back an entire category as a single `.zip`, through a
+`?bundle` endpoint. So instead of requesting each image on its own, the rebuild now
+asks for the category once, unpacks the archive locally, and only reaches for the old
+per-image request when something didn't make it into the bundle.
 
-> [!TIP]
-> A styled before/after walkthrough (colored request rows, the 429, the extract step,
-> file chips) is in the visual companion: `examples/pr-thumbnails.html` — open it in a
-> browser, or drop the panels into the PR as images.
+That bundling only kicks in past a couple of images. A single product page still
+fetches its one thumbnail the old way, since building and unpacking a `.zip` for one
+image isn't worth it.
 
-Concretely, for a category with 45 images:
+A styled before/after walkthrough of this, the `429`, the unpack step, the file
+chips, is in `examples/pr-thumbnails.html`.
+
+For a category with 45 images:
 
 | | Before | After |
 |---|---|---|
-| Requests to the CDN | 45 (one per image) | 1 bundle + up to a few fallbacks |
+| Requests to the CDN | 45 (one per image) | 1 bundle plus rare fallbacks |
 | Where it fails | Aborts on the ~6th request (`429`) | Completes; only genuinely missing images fall back |
 | Images actually built | 5 of 45 | 45 of 45 |
 
-Requested images are grouped by the category folder they live in, each folder is
-fetched once as a `.zip`, and the archive is unpacked locally so the rest of the
-pipeline never notices the difference — it still receives the same `id → local path`
-map it always did.
-
-> [!NOTE]
-> Bulk mode only kicks in once a job asks for **more than 2 images**. A 1–2 image
-> request — the per-page case — isn't worth building and unpacking a `.zip` for, so it
-> keeps using plain per-image requests exactly as before.
-
-Two failure modes are handled differently on purpose:
-
-- **An image is missing from the archive**, or **the whole bundle request fails**
-  (timeout, a `429` on that one request, folder not published yet) — logged as a
-  warning, and that specific image falls back to the original per-image download. One
-  bad folder doesn't take down the rest of the job.
-- **Access is denied** (`401`/`403`) — the token simply can't see this category, so
-  retrying per-image would just waste time hiding a real access problem. This is raised
-  immediately instead of falling back.
+If an image is missing from the archive, or the bundle request itself times out, that
+one image quietly falls back to the old per-image download, logged as a warning,
+while the rest of the category keeps going. An access-denied response gets treated
+differently: if the token can't see the category at all, retrying image by image
+would just hide a permissions problem, so that gets raised immediately instead.
 
 > [!WARNING]
-> **Trade-off:** unpacking a folder's `.zip` reads every image in that category into
-> memory before picking out the ones actually requested. Our category folders are small
-> enough that this isn't a concern in practice, but it's worth knowing if a folder ever
-> grows unusually large.
+> Unpacking a category's `.zip` loads every image in that folder into memory before
+> picking out the ones actually requested. Fine at today's folder sizes, worth
+> revisiting if a category ever grows much larger.
 
 Closes #123
 
 ### Affected areas & models
 
-- Thumbnail build pipeline — bulk downloads from the CDN
-- No change to the per-page single-image path
+- Thumbnail build pipeline — category and bulk-import downloads from the CDN
+- No change to the single-image, per-page path
 
 ### Should be tested by QA
 
 Yes.
 
-- Run a category rebuild for more than 2 images and confirm all expected thumbnails
-  build successfully (previously this could abort with a rate-limit error partway
-  through).
-- Run a single-product page and confirm the thumbnail still loads as before.
-- Optional: point at a category where one image is known to be missing and confirm it
-  falls back gracefully instead of failing the whole job.
+- Rebuild a category with more than a couple dozen images and confirm every thumbnail
+  builds (previously this stalled partway through with a rate-limit error).
+- Load a single product page and confirm its thumbnail still comes through as before.
+- Point at a category with one image known to be missing and confirm it falls back
+  instead of failing the whole rebuild.

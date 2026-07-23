@@ -65,25 +65,25 @@
 
 <h2>Background (Why?)</h2>
 <p>
-  The catalog service builds product thumbnails by downloading each image from our CDN
-  one at a time. That's fine for a single product page, but it falls apart for bulk
-  jobs: rebuilding a whole category, or importing a new supplier's catalog, means
-  asking the CDN for an image every single time, one HTTP request after another.
+  The catalog service builds product thumbnails by asking the CDN for one image at a
+  time: a single request per thumbnail. That works fine on a product page, where only
+  one image is ever needed, but a category rebuild asks for every image in that
+  category back to back, with nothing pacing the requests out.
 </p>
 <p>
-  The CDN rate-limits that pattern. Past a certain number of requests in a short window
-  it starts answering with <span class="badge badge-429">429</span>, and the rebuild
-  aborts partway through the category, leaving thumbnails half-generated with no easy
-  way to know where it stopped.
+  Fire off 45 of those requests in a row and the CDN pushes back. Around the sixth
+  request it starts returning <span class="badge badge-429">429</span>, and the
+  rebuild just stops where it is. The other 39 images are never even requested, and
+  there's no retry, no resume, just a category stuck at 5 thumbnails out of 45.
 </p>
 
 <div class="callout">
   <b>The core idea</b>
-  The CDN stores images in per-category folders and can hand back the whole folder as
-  one <span class="mono">.zip</span> via a <span class="mono">?bundle</span> endpoint.
-  So instead of asking for each image one at a time, ask for the category once, unpack
-  it locally, and only fall back to individual requests for whatever the archive didn't
-  have.
+  The CDN can also hand back an entire category as a single <span class="mono">.zip</span>,
+  through a <span class="mono">?bundle</span> endpoint. So instead of requesting each
+  image on its own, the rebuild now asks for the category once, unpacks the archive
+  locally, and only reaches for the old per-image request when something didn't make
+  it into the bundle.
 </div>
 
 <h3>Before → After</h3>
@@ -135,10 +135,9 @@
 
 <div class="callout tip">
   <b>Why a threshold, not always-bundle</b>
-  Bundle mode only kicks in once a job asks for more than 2 images. A 1–2 image request
-  — the per-page case — isn't worth building and unpacking a <span class="mono">.zip</span>
-  for, so it keeps using plain per-image requests exactly as before. Nothing about the
-  single-page path changes.
+  Bundling only kicks in once a job asks for more than 2 images. A single product
+  page still fetches its one thumbnail the old way, since building and unpacking a
+  <span class="mono">.zip</span> for one image isn't worth it.
 </div>
 
 <h2>By the numbers</h2>
@@ -151,10 +150,9 @@
 
 <div class="callout">
   <b>Trade-off</b>
-  Unpacking a folder's <span class="mono">.zip</span> reads every image in that category
-  into memory before picking out the ones actually requested. Our folders are small
-  enough that this is comfortable today; worth watching if a folder ever grows unusually
-  large.
+  Unpacking a category's <span class="mono">.zip</span> loads every image in that
+  folder into memory before picking out the ones actually requested. Fine at today's
+  folder sizes, worth revisiting if a category ever grows much larger.
 </div>
 
 </div></body></html>

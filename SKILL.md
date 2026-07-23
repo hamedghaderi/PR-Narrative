@@ -129,8 +129,10 @@ You cannot explain a change you don't understand. Gather context first:
   `git diff <base>...HEAD -- <key files>`.
 - Read the **actual changed code**, not just the diff summary. Understand the system
   *before* the change well enough to explain it to a newcomer.
-- Find the linked issue/ticket (branch name, "Closes #…"). The ticket usually states
-  the real problem — the "why".
+- Find the linked issue/ticket (branch name, "Closes #…") and read it — but only as a
+  fact-check. Use it to confirm you understood the problem correctly, not as source
+  material: the actual narrative gets rebuilt from reading the code, and the ticket's
+  specific wording must never survive into the PR body.
 - If the branch bundles several unrelated changes, say so honestly, build the visual
   and narrative around the *primary* change, and summarize the rest in a short list.
 
@@ -140,18 +142,21 @@ cheap once you get it.
 
 #### 2. Find the intuition
 
-Before writing, answer these in one or two sentences each:
+Before writing, work out the story arc, one or two sentences per beat:
 
-- **The problem.** What was broken, missing, or painful? What breaks if we do nothing?
-  Use concrete toy data ("a 30-day backfill fired 30 sequential requests").
-- **The core idea.** If you explained the fix to a colleague in the hallway in 20
-  seconds, what would you say? That sentence opens the Description.
+- **The scene.** What does a user or developer do today, and what concretely goes
+  wrong for them — derived from reading the code path itself, not the ticket? Use
+  concrete toy data ("a 30-day backfill fired 30 sequential requests").
+- **The hallway sentence.** If you explained the fix to a colleague in the hallway in
+  20 seconds, what would you say, in plain words? That sentence opens the Description.
 - **The before/after.** What did the old path look like, and the new one? This becomes
   your styled visual.
 - **The trade-off.** What did this approach cost or rule out? Reviewers trust an honest
   PR more.
 
-If you can't answer these, you don't understand the change yet — go back to step 1.
+If you can't answer these, you don't understand the change yet — go back to step 1. And
+if your answers sound like the ticket, you haven't understood the change — you've only
+read about it.
 
 #### 3. Build the interactive review page, serve it, and open it
 
@@ -272,9 +277,30 @@ See `references/review-ui.md` for the decisions schema and the exact behavior.
 ### Writing style
 
 Write with the clarity and flow of a good technical essayist — engaging, plain, with
-smooth transitions. The reviewer is a smart colleague missing *your* context, not a
-beginner. Respect their time: every sentence should give understanding they lacked.
+smooth transitions. Picture the target reader precisely: a reviewer who has NOT read
+the ticket or the commit message — including a junior developer on the team — and
+must understand both the problem and the solution from the PR body alone.
+Junior-comprehensible does not mean dumbed down: keep every technical fact, just drop
+the context you'd otherwise assume the reader already has. Respect their time: every
+sentence should give understanding they lacked.
 
+- **Tell it as a story, not a summary.** Background is a scene: what someone does
+  today, what concretely goes wrong for them, and why that hurts — not a restatement
+  of the ticket. The Description opens with the one idea that fixes it, in one plain
+  sentence, then shows how life looks after. A reader should be able to retell the
+  change to a colleague after a single read.
+- **Source every claim from the code, not the ticket.** Everything you write in
+  Background or Description has to trace back to the diff or to code behavior you
+  actually observed. Ticket text, issue text, and anything the author told you exist
+  for fact-checking only — read them to confirm you understood the problem, never
+  paraphrase them into the prose. If you catch yourself re-wording the ticket, delete
+  the sentence and re-derive it from the code instead.
+- **Favor a few short paragraphs over hard caps.** There's no word-count limit here on
+  purpose — one idea per paragraph, and if a junior reader would need to reread a
+  sentence, rewrite it. A section that can be one line should be one line. A wall of
+  text is a defect even when every sentence in it is true.
+- **Reach for plain words first.** Prefer everyday language over jargon; when jargon
+  is unavoidable, define it in half a sentence, inline, right where it appears.
 - **Lead with the point.** The first two sentences of Background make the problem
   obvious. The first sentence of the Description is the core idea.
 - **Concrete toy data over abstractions.** "30 sequential requests → HTTP 429" beats
@@ -306,6 +332,10 @@ Re-read both artifacts as if you were the reviewer:
 - Is the main trade-off named honestly?
 - Does it fit the repo's template and title conventions (conventional-commit title,
   `[Internal]` when it shouldn't hit release notes)?
+- Is every claim in Background/Description traceable to the diff or code behavior —
+  not to the ticket, commit message, or what the author told you?
+- Would a junior developer on the team follow the story on a single read — no
+  sentence they'd have to reread, no unexplained jargon?
 
 If any answer is "no", fix it before delivering.
 
@@ -344,8 +374,10 @@ understand:
   actual changed code).
 - For non-trivial or multi-module PRs, fire `explore` agents in parallel to map the
   before/after and call sites, exactly as in author mode. Write the same short
-  Background/core-idea narrative — it becomes the collapsible narrative panel at
-  the top of the annotation page (styled the same as author mode's panels).
+  Background/core-idea narrative, following the exact same story doctrine as author
+  mode's Writing style (code-first sourcing, junior-readable, story arc) rather than
+  restating it here — it becomes the collapsible narrative panel at the top of the
+  annotation page (styled the same as author mode's panels).
 
 ### 3. AI pre-seed (optional, capped — locked policy)
 

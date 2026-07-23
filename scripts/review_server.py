@@ -146,7 +146,11 @@ def main():
 
     if args.open:
         import webbrowser
-        if not webbrowser.open(f"http://127.0.0.1:{port}/"):
+        try:
+            opened = webbrowser.open(f"http://127.0.0.1:{port}/")
+        except Exception:
+            opened = False
+        if not opened:
             print(f"PR_REVIEW_OPEN_FAILED http://127.0.0.1:{port}/", flush=True)
 
     submitted = done.wait(timeout=args.timeout)

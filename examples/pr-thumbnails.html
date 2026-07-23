@@ -79,11 +79,10 @@
 
 <div class="callout">
   <b>The core idea</b>
-  The CDN can also hand back an entire category as a single <span class="mono">.zip</span>,
-  through a <span class="mono">?bundle</span> endpoint. So instead of requesting each
-  image on its own, the rebuild now asks for the category once, unpacks the archive
-  locally, and only reaches for the old per-image request when something didn't make
-  it into the bundle.
+  Category rebuilds now ask the CDN for the whole category as one <span class="mono">.zip</span>,
+  through a <span class="mono">?bundle</span> endpoint, instead of requesting each image
+  on its own. The archive gets unpacked locally, and only images the bundle doesn't
+  have fall back to the old per-image download.
 </div>
 
 <h3>Before → After</h3>

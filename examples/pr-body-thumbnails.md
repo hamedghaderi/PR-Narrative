@@ -12,10 +12,10 @@ stuck at 5 thumbnails out of 45 with no record of where it gave up.
 
 ## Description (How?)
 
-The CDN can also hand back an entire category as a single `.zip`, through a
-`?bundle` endpoint. So instead of requesting each image on its own, the rebuild now
-asks for the category once, unpacks the archive locally, and only reaches for the old
-per-image request when something didn't make it into the bundle.
+Category rebuilds now ask the CDN for the whole category as one `.zip`, through a
+`?bundle` endpoint, instead of requesting each image on its own. The archive gets
+unpacked locally, and only images the bundle doesn't have fall back to the old
+per-image download.
 
 That bundling only kicks in past a couple of images. A single product page still
 fetches its one thumbnail the old way, since building and unpacking a `.zip` for one

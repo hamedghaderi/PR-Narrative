@@ -122,14 +122,15 @@ badges and file chips.
 The Markdown above pairs with a live, interactive review page, not a static mockup:
 
 ![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
-The full page in the browser: narrative panels, a green "Approved" status pill on the
-Background section, "2 / 4 reviewed" progress, and a `429` badge from the rate-limit
-story.
+The full page in the browser: the before panel shows the one-request-per-image calls
+hitting a red `429` and stalling the rest of the batch, while the after panel shows the
+single `?bundle` request unpacking into file chips instead.
 
 ![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
-The "Before → After" section in its amber "Changes requested" state, with a reviewer
-comment already filled in below the control bar. This is the per-section
-Approve / Request-change loop in action, one verdict at a time before Submit.
+Two adjacent sections, two independent verdicts: "Description" is already green
+"Approved", while "Before → After" is amber "Changes requested" with a reviewer
+comment already filled in ("Mention the CDN concurrency limit here so reviewers know
+the retry budget."). Each section carries its own state until every one is approved.
 
 ## Installation
 

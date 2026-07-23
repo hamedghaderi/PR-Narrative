@@ -16,11 +16,16 @@ Standard library only; no pip installs. Usage:
 
     python3 review_server.py --page /tmp/pr-review-<branch>.html \
                              --out  /tmp/pr-review-decisions.json \
-                             [--port 0] [--timeout 1800]
+                             [--port 0] [--timeout 1800] [--open]
 
 It prints one line to stdout: `PR_REVIEW_URL http://127.0.0.1:<port>/` so the caller
 knows where to open the browser. When the reviewer submits (or the timeout elapses),
 the process exits. Poll --out for the decisions file; its presence means "done".
+
+With --open, the server opens the review URL in the default browser once it is
+listening. If the browser fails to launch (e.g. in a headless environment), the server
+prints `PR_REVIEW_OPEN_FAILED http://127.0.0.1:<port>/` to stdout so the caller can
+open the URL manually.
 
 The page is served with a `<meta name="pr-review-live" content="1">` marker injected,
 which flips the page into live-POST mode (see references/review-ui.md). Without the
@@ -114,6 +119,8 @@ def main():
     ap.add_argument("--port", type=int, default=0, help="port (0 = pick a free one)")
     ap.add_argument("--timeout", type=int, default=1800,
                     help="max seconds to wait for a submit before giving up")
+    ap.add_argument("--open", action="store_true",
+                    help="open the review URL in the default browser once the server is listening")
     args = ap.parse_args()
 
     with open(args.page, "r", encoding="utf-8") as fh:
@@ -136,6 +143,11 @@ def main():
     t.start()
 
     print(f"PR_REVIEW_URL http://127.0.0.1:{port}/", flush=True)
+
+    if args.open:
+        import webbrowser
+        if not webbrowser.open(f"http://127.0.0.1:{port}/"):
+            print(f"PR_REVIEW_OPEN_FAILED http://127.0.0.1:{port}/", flush=True)
 
     submitted = done.wait(timeout=args.timeout)
 

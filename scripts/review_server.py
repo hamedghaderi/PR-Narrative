@@ -22,10 +22,20 @@ It prints one line to stdout: `PR_REVIEW_URL http://127.0.0.1:<port>/` so the ca
 knows where to open the browser. When the reviewer submits (or the timeout elapses),
 the process exits. Poll --out for the decisions file; its presence means "done".
 
-With --open, the server opens the review URL in the default browser once it is
-listening. If the browser fails to launch (e.g. in a headless environment), the server
-prints `PR_REVIEW_OPEN_FAILED http://127.0.0.1:<port>/` to stdout so the caller can
-open the URL manually.
+With --open, the server tries to open the review URL in a browser once it is listening,
+walking a platform-aware chain of launchers (`BROWSER` env var, `/usr/bin/open`,
+`xdg-open`/`wslview`, `os.startfile`, then Python's `webbrowser`). It stops at the first
+launcher that reports success. Three stdout sentinels describe what happened:
+
+  - `PR_REVIEW_OPEN_DIAG strategy=<name> rc=<returncode|ok|timeout|error:<ExcType>>`
+    — one line per launcher actually attempted, for diagnosing a silent failure.
+  - `PR_REVIEW_OPEN_OK <url>` — a launcher reported success. Note this means the launch
+    command succeeded, not that a window is definitely on screen.
+  - `PR_REVIEW_OPEN_FAILED <url>` — every launcher failed; the caller should open the
+    URL manually (e.g. in a headless environment).
+
+Exactly one of `PR_REVIEW_OPEN_OK` / `PR_REVIEW_OPEN_FAILED` is printed per run, and
+only when --open is passed. Either way the server keeps serving.
 
 The page is served with a `<meta name="pr-review-live" content="1">` marker injected,
 which flips the page into live-POST mode (see references/review-ui.md). Without the
@@ -43,14 +53,105 @@ SKILL.md), but keeping the socket loopback-only is the primary guard.
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LIVE_MARKER = '<meta name="pr-review-live" content="1">'
 
 MAX_BODY_BYTES = 5 * 1024 * 1024
+
+# Seconds to wait on a launcher subprocess before giving up on it. Launchers are
+# fire-and-forget by design, so anything this slow is hung, not working.
+OPEN_TIMEOUT_SECONDS = 10
+
+
+def _open_browser(url: str) -> bool:
+    """Try hard to open `url` in a browser, and say out loud what was tried.
+
+    `webbrowser.open()` alone is not enough: it returns True as soon as it finds a
+    *handler*, which on macOS means an osascript hop that quietly does nothing from a
+    non-interactive shell. So instead we walk platform-native launchers first and print a
+    `PR_REVIEW_OPEN_DIAG` line for every strategy attempted, then exactly one
+    `PR_REVIEW_OPEN_OK` / `PR_REVIEW_OPEN_FAILED` verdict.
+
+    Returns True if some launcher reported success. Never raises: opening a browser is a
+    convenience, and the server must keep serving even if it fails.
+    """
+
+    def diag(strategy, rc):
+        print(f"PR_REVIEW_OPEN_DIAG strategy={strategy} rc={rc}", flush=True)
+
+    def succeeded():
+        print(f"PR_REVIEW_OPEN_OK {url}", flush=True)
+        return True
+
+    def try_webbrowser(strategy):
+        try:
+            opened = webbrowser.open(url)
+        except Exception as exc:
+            diag(strategy, f"error:{type(exc).__name__}")
+            return False
+        # False means "no handler found at all" — the one case webbrowser is honest about.
+        diag(strategy, "ok" if opened else "error:NoHandler")
+        return bool(opened)
+
+    def try_launcher(strategy, argv, timeout_is_success):
+        try:
+            proc = subprocess.run(
+                argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=OPEN_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            # A launcher that blocks usually handed off to a browser and then sat there.
+            diag(strategy, "timeout")
+            return timeout_is_success
+        except Exception as exc:
+            diag(strategy, f"error:{type(exc).__name__}")
+            return False
+        diag(strategy, proc.returncode)
+        return proc.returncode == 0
+
+    try:
+        # An explicit BROWSER is the operator's stated preference, so honor it first —
+        # but log it distinctly, since a broken BROWSER is a silent false positive.
+        if os.environ.get("BROWSER", "").strip():
+            if try_webbrowser("BROWSER-env"):
+                return succeeded()
+
+        if sys.platform == "darwin":
+            if try_launcher("darwin-open", ["/usr/bin/open", url], timeout_is_success=False):
+                return succeeded()
+        elif sys.platform.startswith("linux"):
+            for strategy in ("xdg-open", "wslview"):
+                exe = shutil.which(strategy)
+                if exe is None:
+                    continue
+                if try_launcher(strategy, [exe, url], timeout_is_success=True):
+                    return succeeded()
+        elif sys.platform.startswith("win"):
+            if hasattr(os, "startfile"):
+                try:
+                    os.startfile(url)
+                except Exception as exc:
+                    diag("os-startfile", f"error:{type(exc).__name__}")
+                else:
+                    diag("os-startfile", "ok")
+                    return succeeded()
+
+        if try_webbrowser("webbrowser"):
+            return succeeded()
+    except Exception as exc:  # the chain itself broke; still never take the server down
+        diag("chain", f"error:{type(exc).__name__}")
+
+    print(f"PR_REVIEW_OPEN_FAILED {url}", flush=True)
+    return False
 
 
 def build_handler(page_html: str, out_path: str, done_event: threading.Event):
@@ -145,13 +246,7 @@ def main():
     print(f"PR_REVIEW_URL http://127.0.0.1:{port}/", flush=True)
 
     if args.open:
-        import webbrowser
-        try:
-            opened = webbrowser.open(f"http://127.0.0.1:{port}/")
-        except Exception:
-            opened = False
-        if not opened:
-            print(f"PR_REVIEW_OPEN_FAILED http://127.0.0.1:{port}/", flush=True)
+        _open_browser(f"http://127.0.0.1:{port}/")
 
     submitted = done.wait(timeout=args.timeout)
 

@@ -56,7 +56,8 @@ An annotation page, plus one of two outcomes depending on whether a PR exists ye
 3. **A local fix-list** (no PR yet). Reviewing a branch before you've opened a PR
    builds the same annotation page, but nothing gets posted anywhere. Submit hands you
    a Markdown fix-list of your accepted findings instead, with a reminder that they're
-   unverified until you confirm each one.
+   unverified until you confirm each one; the page also carries a **📋 Copy fix-list**
+   button.
 
 The flow: **fetch the diff → explain it → annotate (triage any AI drafts) → Submit →
 pending review on GitHub** (or a fix-list, for a local branch).
@@ -66,7 +67,8 @@ pending review on GitHub** (or a fix-list, for a local branch).
 Two artifacts, plus an interactive review loop:
 
 1. **An interactive HTML review page** — it **opens automatically in your browser**
-   and shows the rich visual (report-quality before/after panels — colored request
+   (when no tab opens automatically, the agent shows the URL to click) and shows the
+   rich visual (report-quality before/after panels — colored request
    rows, a red failure, an "extract locally" step, file chips — and the
    Background/Description narrative), with **Approve / Request-change** controls and a
    comment box under each section. You review section by section and click **Submit**;
@@ -75,9 +77,10 @@ Two artifacts, plus an interactive review loop:
    section is approved. If the server isn't running, the page falls back to a
    **Download decisions** button. No mermaid, no ASCII art — real HTML/CSS.
 2. **A GitHub-flavored Markdown PR body** — fills your repo's PR template, is complete
-   on its own (a reviewer who never opens the HTML still gets the full story), uses
-   GitHub `> [!NOTE]` / `> [!TIP]` callouts and comparison tables, and links to the
-   review page for the rich visual.
+   on its own (a reviewer who never opens the HTML still gets the full story), and uses
+   GitHub `> [!NOTE]` / `> [!TIP]` callouts and comparison tables. The review page
+   itself carries a **📋 Copy PR description** button that copies this same body once
+   it's approved.
 
 The loop is: **generate → auto-open review page → approve / request changes per
 section → download decisions → agent revises → re-open → repeat until approved.**
@@ -229,8 +232,8 @@ you've approved everything, then gives you the final Markdown. Create the PR you
 (the skill won't open it for you). Author mode never touches `gh` either; it only
 reads your local git history and diff.
 
-If the request is genuinely ambiguous ("review my changes before I open a PR" could
-mean either), the agent asks one clarifying question rather than guessing.
+Either way, the agent always confirms the mode with one quick question first
+(inferred mode recommended) before it starts, rather than guessing.
 
 ## Repository layout
 

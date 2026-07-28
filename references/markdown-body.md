@@ -2,7 +2,7 @@
 
 The Markdown body fills the repo's PR template and is complete on its own: a reviewer
 who never opens the HTML still gets the full narrative from GitHub-rendered Markdown.
-It links to the HTML file for the rich before/after visual.
+It never links back to the local review page — see §3.
 
 Write it as a short story a reviewer can follow without outside context, not a
 paraphrase of the ticket. Assume the reader hasn't read the ticket or the commit
@@ -20,7 +20,7 @@ change.
 
 1. GitHub callout syntax
 2. Comparison / benchmark tables
-3. Linking to the HTML companion
+3. No links to the local review page
 4. Filling the repo's PR template
 5. Title conventions
 6. Full worked example (a finished Markdown body)
@@ -66,22 +66,23 @@ Escape pipes inside cells as `\|`. Leave a blank line before the table.
 
 ---
 
-## 3. Linking to the HTML companion
+## 3. No links to the local review page
 
-Near the top of the Description, point the reviewer at the styled visual. Since the
-HTML lives outside the repo (`/tmp/...`), tell the user how it's meant to be shared —
-usually they open it locally, or paste screenshots of the panels into the PR comment.
-Phrase it plainly:
+The PR body is pasted into GitHub — any local file path or loopback URL is dead the
+moment it leaves your machine. Never embed the review page's local path or URL in the
+Markdown body. If a visual companion exists, mention it in conversation with the user
+("the review page is at…"), not inside the body. The body has to stand on its own: a
+reviewer on GitHub gets the full story with nothing to open locally.
 
 ```markdown
 > [!TIP]
-> A styled before/after walkthrough of this change is in the visual companion:
-> `/tmp/2026-07-22-pr-thumbnails.html` — open it locally, or drop the panels into the
-> PR as images.
+> A styled before/after walkthrough of this change was shared separately as a visual
+> companion — the Background and Description below tell the same story on their own.
 ```
 
-If the user has already told you how images get into their PRs (drag-drop upload,
-etc.), adapt the wording. The skill itself never uploads or opens the PR.
+If the user wants the visual embedded some other way (drag-dropped screenshots in the
+PR comment, for example), that's a separate action outside the Markdown body itself;
+the skill never uploads or opens the PR.
 
 ---
 

@@ -128,9 +128,11 @@
   .footer .footer-btns{display:flex;gap:8px;margin-left:auto}
   .footer button{font:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:8px;padding:9px 16px}
   #submit-btn{border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text)}
-  #download-btn{border:1px solid var(--border);background:var(--panel-bg);color:var(--ink)}
+  #download-btn,#copy-fixlist-btn{border:1px solid var(--border);background:var(--panel-bg);color:var(--ink)}
   #submit-btn:disabled{opacity:.6;cursor:default}
-  @media (max-width:600px){body{padding:16px 12px 140px}.footer .footer-btns{margin-left:0;width:100%}}
+  /* 180px, not 140px: three footer buttons wrap onto their own row on narrow
+     screens, and the taller footer would otherwise clip the end of the diff. */
+  @media (max-width:600px){body{padding:16px 12px 180px}.footer .footer-btns{margin-left:0;width:100%}}
 </style>
 </head>
 <body>
@@ -167,6 +169,7 @@
     </div>
     <div class="footer-btns">
       <button id="download-btn" type="button">⬇ Download annotations</button>
+      <button id="copy-fixlist-btn" type="button">📋 Copy fix-list</button>
       <button id="submit-btn" type="button">Submit review</button>
     </div>
   </div>
@@ -766,9 +769,128 @@
     return out;
   }
 
+  // Local-mode fix-list: the Markdown the agent would render from a submitted
+  // payload, built client-side so the user can paste it somewhere directly
+  // (chat, an issue, a scratch file) without a round-trip through the server.
+  // Format is annotation-schema.md §4 verbatim, with ONE deliberate omission:
+  // the mandatory handoff paragraph. That paragraph is the agent's guard against
+  // "fixing" unconfirmed findings, so it belongs on the agent's printed copy of
+  // the file — pasting it into a GitHub comment would only confuse the author.
+  function buildFixlistMarkdown() {
+    var today = new Date().toISOString().split("T")[0];
+    var branch = DATA.branch || "unknown";
+
+    // buildPayload() deliberately does NOT filter by acceptance (that happens
+    // downstream in build_review.py), so the filter lives here instead:
+    // both user annotations and AI drafts must have accepted === true;
+    // AI drafts additionally must not be discarded.
+    var accepted = [];
+    userAnnotations.forEach(function (a) {
+      if (a.accepted === true) accepted.push(a);
+    });
+    aiAnnotations.forEach(function (a) {
+      if (a.accepted === true && !a._discarded) accepted.push(a);
+    });
+
+    var lines = [];
+    lines.push("# Review fix-list — " + branch);
+    lines.push("");
+    lines.push("Generated " + today + ". Local branch review, nothing posted to GitHub.");
+    lines.push("");
+
+    var byFile = {};
+    var fileOrder = [];
+    accepted.forEach(function (a) {
+      if (a.scope === "general") return;
+      if (!a.filePath) return;
+      if (!byFile[a.filePath]) { byFile[a.filePath] = []; fileOrder.push(a.filePath); }
+      byFile[a.filePath].push(a);
+    });
+
+    fileOrder.forEach(function (fp) {
+      lines.push("## " + fp);
+      lines.push("");
+      byFile[fp].forEach(function (a) {
+        if (a.scope === "line" && a.lineStart != null) {
+          var rangeStr = a.lineStart === a.lineEnd
+            ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
+          var isSuggestion = a.type === "suggestion";
+          lines.push("### Lines " + rangeStr + " (" + a.side + ")" +
+            (isSuggestion ? " — suggestion" : ""));
+          lines.push("");
+          lines.push(a.body || "");
+          lines.push("");
+          if (isSuggestion && a.suggestedCode != null) {
+            lines.push("```suggestion");
+            lines.push(a.suggestedCode);
+            lines.push("```");
+            lines.push("");
+          }
+        } else if (a.scope === "file") {
+          lines.push("### File-level");
+          lines.push("");
+          lines.push(a.body || "");
+          lines.push("");
+        }
+      });
+    });
+
+    var generalAnnotations = accepted.filter(function (a) { return a.scope === "general"; });
+    var hasGeneral = generalAnnotations.length > 0 || !!(generalComment && generalComment.trim());
+    if (hasGeneral) {
+      lines.push("## General");
+      lines.push("");
+      generalAnnotations.forEach(function (a) { lines.push(a.body || ""); lines.push(""); });
+      if (generalComment && generalComment.trim()) {
+        lines.push(generalComment.trim());
+        lines.push("");
+      }
+      lines.push("---");
+      lines.push("");
+    }
+
+    return lines.join("\n");
+  }
+
   var submitBtn = document.getElementById("submit-btn");
   var downloadBtn = document.getElementById("download-btn");
+  var copyFixlistBtn = document.getElementById("copy-fixlist-btn");
   if (!isLive) submitBtn.style.display = "none"; // no server → download only
+  // PR mode has no fix-list — accepted comments go to GitHub as a pending review.
+  if (DATA.mode !== "local") copyFixlistBtn.style.display = "none";
+
+  copyFixlistBtn.addEventListener("click", function () {
+    var md = buildFixlistMarkdown();
+    var btn = this;
+    var original = btn.textContent;
+
+    // writeText must be called synchronously in the click handler: Safari ties
+    // clipboard access to transient activation, which an intervening await drops.
+    var p = navigator.clipboard
+      ? navigator.clipboard.writeText(md)
+      : Promise.reject(new Error("no clipboard API"));
+    p.then(function () {
+      btn.textContent = "✓ Copied";
+      setTimeout(function () { btn.textContent = original; }, 2000);
+    }).catch(function () {
+      // Off-screen, NOT display:none — hidden elements can't be selected.
+      var ta = document.createElement("textarea");
+      ta.value = md;
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        btn.textContent = "✓ Copied";
+      } catch (e) {
+        btn.textContent = "Copy failed";
+      }
+      setTimeout(function () {
+        btn.textContent = original;
+        document.body.removeChild(ta);
+      }, 2000);
+    });
+  });
 
   submitBtn.addEventListener("click", function () {
     var payload = buildPayload();

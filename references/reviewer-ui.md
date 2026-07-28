@@ -145,8 +145,8 @@ suggestedCode?, origin: "ai", accepted: false, severity, reasoning}`.
 
 ## 3. Serve + wait
 
-Same single-Bash-call launch/poll pattern as author mode (see the SKILL.md server
-snippet at lines 144–157) — the server binary and the wait discipline don't change,
+Same single-Bash-call launch/poll pattern as author mode (see SKILL.md §4 "Build the
+page, serve it, and wait") — the server binary and the wait discipline don't change,
 only the page path and the out-file name:
 
 ```bash
@@ -154,13 +154,43 @@ OUT=/tmp/pr-annotations.json
 rm -f "$OUT"                         # clear any stale annotations first
 python3 <skill>/scripts/review_server.py \
   --page /tmp/2026-07-22-pr-annotate-{r}-{n}.html \
-  --out  "$OUT" --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
-sleep 1
-URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
-open "$URL"
-echo "Review open at $URL — waiting for Submit…"
-while [ ! -f "$OUT" ]; do sleep 2; done
-cat "$OUT"
+  --out  "$OUT" --open --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
+PID=$!
+# Poll for the URL, with dead-process detection (bounded ~15s).
+URL=""
+for i in $(seq 1 30); do
+  URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
+  [ -n "$URL" ] && break
+  if ! kill -0 "$PID" 2>/dev/null; then
+    echo "ERROR: review server exited before printing a URL. Log:"
+    tail -20 /tmp/pr-review-server.log
+    exit 1
+  fi
+  sleep 0.5
+done
+if [ -z "$URL" ]; then
+  echo "ERROR: timed out waiting for the review server URL. Log:"
+  tail -20 /tmp/pr-review-server.log
+  exit 1
+fi
+# Wait for open sentinel (PR_REVIEW_OPEN_OK or PR_REVIEW_OPEN_FAILED), bounded ~10s.
+# The URL prints before the open attempt, so the URL grep can return before the sentinel.
+for i in $(seq 1 20); do
+  grep -q 'PR_REVIEW_OPEN_OK\|PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log && break
+  sleep 0.5
+done
+if grep -q 'PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log; then
+  # Shell-level fallback — fires ONLY on explicit failure (unconditional = two tabs = second Submit to dead server)
+  case "$(uname)" in Darwin) open "$URL" ;; *) command -v xdg-open >/dev/null && xdg-open "$URL" ;; esac
+fi
+echo "Review page: $URL"
+# Always include this URL in your message to the user — open success or not.
+# Poll for the annotations file (robust: works even if the server already exited).
+while [ ! -f "$OUT" ]; do
+  kill -0 "$PID" 2>/dev/null || { echo "Server exited before Submit — check /tmp/pr-review-server.log (it may have hit --timeout; re-run this block)."; break; }
+  sleep 2
+done
+[ -f "$OUT" ] && cat "$OUT"
 ```
 
 Run this as **one Bash tool call**, exactly as in author mode — launching the server
@@ -228,6 +258,58 @@ have discussed the verdicts.
 This is what stops the agent from racing ahead and "fixing" findings the user hasn't
 actually confirmed. Do not shorten it, reorder it, or drop the
 `Confirmed / Partly / Not a bug / Intended` list.
+
+### 5.1 The in-page "Copy fix-list" button
+
+The page can also produce that same Markdown without waiting for the agent. The
+sticky footer carries a third, secondary button — `#copy-fixlist-btn`
+("📋 Copy fix-list"), styled like `#download-btn` because copying is not the primary
+action — that serializes the current annotation state to the clipboard on click. It's
+for the case where the user wants the findings *somewhere else* right now (a chat
+message, an issue, a scratch file) rather than waiting for a submit round-trip.
+
+The button is stateless: it reads the in-memory annotation state, writes nothing to
+`localStorage`, POSTs nothing, and does not touch `buildPayload()` or the Submit path.
+
+- **Local mode only.** The template hides it whenever `DATA.mode !== "local"`, next to
+  the existing `isLive` check that hides `#submit-btn`. In PR mode there is no
+  fix-list — accepted comments become a pending GitHub review (§4) — so a copy button
+  there would offer an artifact that mode never produces. There is exactly one copy
+  button on the page; do not add a PR-mode counterpart.
+- **Acceptance filtering happens in the button, not downstream.** `buildPayload()`
+  deliberately ships every live annotation with its `accepted` flag intact and lets
+  `build_review.py` filter, so the clipboard serializer cannot reuse it as-is. It
+  applies the §5 filter itself: user annotations are included unless `accepted` was
+  explicitly set to `false`, AI drafts only when `accepted === true` **and** not
+  `_discarded`. Same cut as the GitHub path, so the copied list and a would-be pending
+  review always agree.
+- **Format is `references/annotation-schema.md` §4, verbatim.** Per-file `##` headings
+  in first-seen order, `### Lines N (SIDE)` for a single line and
+  `### Lines N-M (SIDE) — suggestion` for a range carrying suggested code, an
+  unescaped ` ```suggestion ` fence around `suggestedCode`, `### File-level` for
+  `scope: "file"`, and a trailing `## General` section holding `scope: "general"`
+  bodies followed by the footer's `generalComment`. The `# Review fix-list — <branch>`
+  title and `Generated YYYY-MM-DD. Local branch review, nothing posted to GitHub.`
+  line come first.
+- **The mandatory handoff paragraph is omitted from the clipboard — deliberately.**
+  §4 requires that paragraph (`Treat the findings above as unverified review input…`)
+  in every fix-list *file*, and §5 above still appends it verbatim when the agent
+  writes and prints one. It is an instruction aimed at the agent, telling it not to
+  race ahead and "fix" unconfirmed findings. The clipboard content is aimed at a human
+  destination the user picks, so carrying those instructions along would only read as
+  noise there. Omitting it from the clipboard does **not** relax the §5 requirement for
+  the file the agent produces.
+- **Clipboard strategy.** `navigator.clipboard.writeText(md)` is called
+  **synchronously** inside the click handler — Safari ties clipboard access to
+  transient activation, which any intervening `await` discards — and its promise is
+  handled with `.then()` / `.catch()`. On rejection (or a missing
+  `navigator.clipboard`, e.g. a page opened over plain `http://` in a browser that
+  gates the API on a secure context) it falls back to a throwaway `<textarea>`
+  positioned off-screen with `position:fixed; left:-9999px` and
+  `document.execCommand("copy")`. The fallback element must not use `display:none`:
+  hidden elements can't be selected, so the copy silently produces nothing.
+- **Feedback.** The label switches to `✓ Copied` (or `Copy failed` if even the
+  fallback throws) and reverts to its original text after 2 seconds.
 
 ## 6. Decisions schema
 

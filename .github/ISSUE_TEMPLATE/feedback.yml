@@ -1,0 +1,56 @@
+name: Feedback
+description: Tell us what worked, what didn't, or what you'd change
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying PR Narrative. A half-formed thought is fine; you don't need a
+        reproducible bug to open this.
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which mode?
+      options:
+        - Author mode (writing a PR description)
+        - Reviewer mode (reviewing a diff)
+        - Both
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent are you running it in?
+      options:
+        - Claude Code
+        - OpenCode
+        - Cursor
+        - Codex
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What's on your mind?
+      description: >
+        What you asked for, what you got back, and what you expected instead. If the
+        output itself is the point, paste it in.
+      placeholder: |
+        I asked it to review PR #12 and the AI drafts all landed on the same file...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: >
+        Optional. Your OS, a screenshot of the review page, or a link to the PR if it's
+        public.
+    validations:
+      required: false

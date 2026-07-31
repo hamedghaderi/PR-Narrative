@@ -40,17 +40,25 @@ when nothing in the diff clears the bar, the page opens with no AI comments at a
 
 ## How it works
 
-**Reviewer mode.** Point it at a PR, or at a local branch that doesn't have one yet. It
-builds a page with the narrative context up top and the real diff below: click a line to
-comment, drag across a few lines for a range, or leave a suggestion, and triage any
-AI-drafted callouts. On Submit, your accepted comments post as a single **pending**
-review that you finalize yourself on github.com. A local branch posts nothing anywhere
-and hands you a Markdown fix-list instead.
+### Reviewer mode
 
-**Author mode.** It writes the description from the code rather than the ticket, then
-opens an interactive page where you Approve or Request-change each section. Your
-decisions go back through a small bundled local server and it revises until everything
-is approved. The result is a GitHub-flavored Markdown PR body that fills your repo's
+PR URL or local branch → narrative context → interactive diff → accept or reject AI
+findings → **pending GitHub review**, or a local fix-list
+
+The page puts the narrative up top and the real diff below it. Click a line to comment,
+drag across a few lines for a range, or leave a suggestion. AI-drafted callouts arrive
+unaccepted, so nothing reaches GitHub that you didn't keep. On Submit, your accepted
+comments post as a single pending review that you finalize yourself on github.com.
+Reviewing a local branch posts nothing anywhere.
+
+### Author mode
+
+Branch diff → narrative PR body → section-by-section approval → revision loop →
+**final Markdown**
+
+It writes the description from the code rather than the ticket. You Approve or
+Request-change each section, your decisions go back through a small bundled local
+server, and it revises until everything is approved. The body fills your repo's PR
 template and stands on its own.
 
 Both modes avoid mermaid diagrams, file-by-file changelogs and method-name dumps, and

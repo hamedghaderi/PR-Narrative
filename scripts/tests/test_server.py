@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tests for scripts/review_server.py — the live review server.
+"""Tests for scripts/review_server.py: the live review server.
 
 TDD: these tests are written FIRST and must fail against the pre-extension
 server (RED), then pass once the reviewer-mode routing, 400 (invalid JSON) and
 413 (oversized body) guards are added (GREEN). Stdlib unittest + http.client
-only — no `requests`, no pip installs.
+only, no `requests`, no pip installs.
 
 Scope is LOCKED to five behaviors (per the plan's Metis S4 directive):
   1. POST valid author-mode payload  -> 200, file written, round-trips

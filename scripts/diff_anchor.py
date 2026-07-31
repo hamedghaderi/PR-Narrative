@@ -7,8 +7,8 @@ Pure parsing: given the JSON array returned by
 anchors `(path, line, side)`, validates multi-line ranges, and emits the
 "Diff JSON contract" the browser template consumes.
 
-Standard library only; no pip installs, no network calls, no `gh` invocation —
-the caller feeds it JSON. Usage:
+Standard library only; no pip installs, no network calls, no `gh` invocation.
+The caller feeds it JSON. Usage:
 
     python3 diff_anchor.py --files-json /tmp/pr-<n>-files.json [--cap 30]
 

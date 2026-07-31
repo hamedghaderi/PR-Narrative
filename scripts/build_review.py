@@ -9,7 +9,7 @@ parsed diff via `scripts/diff_anchor.py`. The result is:
     { "payload": { "commit_id", "body", "comments": [...] }, "warnings": [...] }
 
 The payload NEVER carries an `event` key: a review created with no event is a
-PENDING review, which is the whole point — the user finalizes the verdict on
+PENDING review, which is the whole point. The user finalizes the verdict on
 github.com. The deprecated `position` field is likewise never emitted.
 
 Standard library only; no network calls, no `gh` invocation. The caller pipes the
@@ -109,10 +109,10 @@ def _map_file_comment(ann, files, warnings):
 def build_payload(annotations, files, commit_id, body=""):
     """Assemble the pending-review payload from accepted annotations.
 
-    `annotations` — list of annotation objects (contract §1). Only those with
-    `accepted: true` are considered. `files` — output of `diff_anchor.parse_files`
-    (or a raw gh files list, which is re-normalized). `commit_id` — the headRefOid
-    the diff was generated against. `body` — the review-level lead text (usually the
+    `annotations`: list of annotation objects (contract §1). Only those with
+    `accepted: true` are considered. `files`: output of `diff_anchor.parse_files`
+    (or a raw gh files list, which is re-normalized). `commit_id`: the headRefOid
+    the diff was generated against. `body`: the review-level lead text (usually the
     submission's `generalComment`).
     """
     files = diff_anchor.parse_files(files)

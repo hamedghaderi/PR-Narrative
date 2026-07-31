@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for scripts/diff_anchor.py — the diff-anchoring engine.
+"""Tests for scripts/diff_anchor.py: the diff-anchoring engine.
 
 TDD: these tests are written FIRST and must fail before diff_anchor.py exists
 (RED), then pass once the module is implemented (GREEN). Stdlib unittest only.

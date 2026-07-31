@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for scripts/build_review.py — the GitHub pending-review payload builder.
+"""Tests for scripts/build_review.py: the GitHub pending-review payload builder.
 
 TDD: these tests are written FIRST and must fail before build_review.py exists
 (RED), then pass once the module is implemented (GREEN). Stdlib unittest only.

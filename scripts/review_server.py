@@ -2,12 +2,12 @@
 """Live review server for the pr-narrative skill.
 
 Serves an interactive PR review page and captures the reviewer's decisions the moment
-they click Submit — no manual download/hand-back step. On submit it writes the
+they click Submit, with no manual download/hand-back step. On submit it writes the
 decisions JSON to disk (where the agent reads it) and then shuts itself down.
 
 Two Submit payload shapes are accepted, discriminated by the presence of a `kind`
 field (see references/annotation-schema.md §3):
-  - author mode: `{ branch, generated_at, overall, sections }` — no `kind` field.
+  - author mode: `{ branch, generated_at, overall, sections }` (no `kind` field).
   - reviewer mode: `{ kind: "review-annotations", ... }`.
 Both are written verbatim to --out and resolve the single-shot wait identically; the
 server only routes on `kind`, it does not interpret the annotation contents.
@@ -27,11 +27,11 @@ walking a platform-aware chain of launchers (`BROWSER` env var, `/usr/bin/open`,
 `xdg-open`/`wslview`, `os.startfile`, then Python's `webbrowser`). It stops at the first
 launcher that reports success. Three stdout sentinels describe what happened:
 
-  - `PR_REVIEW_OPEN_DIAG strategy=<name> rc=<returncode|ok|timeout|error:<ExcType>>`
-    — one line per launcher actually attempted, for diagnosing a silent failure.
-  - `PR_REVIEW_OPEN_OK <url>` — a launcher reported success. Note this means the launch
+  - `PR_REVIEW_OPEN_DIAG strategy=<name> rc=<returncode|ok|timeout|error:<ExcType>>`:
+    one line per launcher actually attempted, for diagnosing a silent failure.
+  - `PR_REVIEW_OPEN_OK <url>`: a launcher reported success. Note this means the launch
     command succeeded, not that a window is definitely on screen.
-  - `PR_REVIEW_OPEN_FAILED <url>` — every launcher failed; the caller should open the
+  - `PR_REVIEW_OPEN_FAILED <url>`: every launcher failed; the caller should open the
     URL manually (e.g. in a headless environment).
 
 Exactly one of `PR_REVIEW_OPEN_OK` / `PR_REVIEW_OPEN_FAILED` is printed per run, and
@@ -42,7 +42,7 @@ which flips the page into live-POST mode (see references/review-ui.md). Without 
 server, the same page still works via its Download-decisions fallback.
 
 Security note: this server binds to 127.0.0.1 (loopback) only, on purpose. That is the
-trust boundary — the reviewer typing comments is the local operator who launched the
+trust boundary: the reviewer typing comments is the local operator who launched the
 skill, so the decisions JSON is first-party input. Do NOT change the bind address to
 0.0.0.0 or expose it beyond localhost: doing so would let a *different* person's
 free-text comments flow into the agent's revision instructions (indirect prompt
@@ -96,7 +96,7 @@ def _open_browser(url: str) -> bool:
         except Exception as exc:
             diag(strategy, f"error:{type(exc).__name__}")
             return False
-        # False means "no handler found at all" — the one case webbrowser is honest about.
+        # False means "no handler found at all", the one case webbrowser is honest about.
         diag(strategy, "ok" if opened else "error:NoHandler")
         return bool(opened)
 
@@ -119,7 +119,7 @@ def _open_browser(url: str) -> bool:
         return proc.returncode == 0
 
     try:
-        # An explicit BROWSER is the operator's stated preference, so honor it first —
+        # An explicit BROWSER is the operator's stated preference, so honor it first,
         # but log it distinctly, since a broken BROWSER is a silent false positive.
         if os.environ.get("BROWSER", "").strip():
             if try_webbrowser("BROWSER-env"):
@@ -228,7 +228,7 @@ def main():
         page_html = fh.read()
 
     # Inject the live marker so the page enables server mode. Put it right after
-    # <head> if present, else prepend — either way the page can detect it.
+    # <head> if present, else prepend; either way the page can detect it.
     if LIVE_MARKER not in page_html:
         if "<head>" in page_html:
             page_html = page_html.replace("<head>", "<head>\n" + LIVE_MARKER, 1)

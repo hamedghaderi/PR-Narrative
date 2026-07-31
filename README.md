@@ -66,6 +66,10 @@ Author mode never opens the PR for you.
 
 ## Example output
 
+Both artifacts below come from one invented scenario: a service that fetched product
+thumbnails one at a time and hit a CDN rate limit, and now pulls a whole category as a
+single bundle.
+
 ![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
 The before panel shows one-request-per-image calls hitting a red `429` and stalling the
 rest of the batch; the after panel shows the single `?bundle` request unpacking into
@@ -76,40 +80,16 @@ Two adjacent sections, two independent verdicts: "Description" is green "Approve
 "Before → After" is amber "Changes requested". Each section carries its own state until
 every one is approved.
 
-<details>
-<summary><strong>The generated Markdown PR body</strong></summary>
-
-A made-up scenario: a service that downloaded product thumbnails one at a time, hit a
-CDN rate limit, and now fetches a whole category as a single bundle.
-
-```markdown
-## Background (Why?)
-
-The catalog service builds product thumbnails by asking the CDN for one image at a
-time: a single request per thumbnail. That works fine on a product page, where only
-one image is ever needed, but a category rebuild asks for every image in that
-category back to back, with nothing pacing the requests out.
-
-## Description (How?)
-
-Category rebuilds now ask the CDN for the whole category as one `.zip`, through a
-`?bundle` endpoint, instead of requesting each image on its own. The archive gets
-unpacked locally, and only images the bundle doesn't have fall back to the old
-per-image download.
-
-For a category with 45 images:
+The Markdown body that ships alongside the page makes the same change concrete:
 
 | | Before | After |
 |---|---|---|
 | Requests to the CDN | 45 (one per image) | 1 bundle plus rare fallbacks |
 | Where it fails | Aborts on the ~6th request (`429`) | Completes; only genuinely missing images fall back |
 | Images actually built | 5 of 45 | 45 of 45 |
-```
 
-The HTML companion renders the same before/after as styled panels. Both files live in
-[`examples/`](./examples).
-
-</details>
+The full generated pair, the [Markdown body](./examples/pr-body-thumbnails.md) and its
+[HTML visual](./examples/pr-thumbnails.html), lives in [`examples/`](./examples).
 
 > **Useful? Star it so other developers can find it.**
 

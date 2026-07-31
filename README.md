@@ -15,9 +15,6 @@ npx skills add hamedghaderi/pr-narrative
 
 https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
 
-Works with **Claude Code**, **OpenCode**, **Cursor**, **Codex** and
-[70+ more agents](https://github.com/vercel-labs/skills#supported-agents).
-
 [`ai-agent`](https://github.com/topics/ai-agent) ·
 [`code-review`](https://github.com/topics/code-review) ·
 [`pull-request`](https://github.com/topics/pull-request) ·
@@ -48,20 +45,6 @@ stop at three findings in a file, so it writes eleven, and the two that mattered
 buried under nine that didn't. Seeding zero findings is an explicitly valid outcome:
 when nothing in the diff clears the bar, the page opens with no AI comments at all.
 
-## See it in action
-
-![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
-The before panel shows one-request-per-image calls hitting a red `429` and stalling the
-rest of the batch; the after panel shows the single `?bundle` request unpacking into
-file chips instead.
-
-![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
-Two adjacent sections, two independent verdicts: "Description" is green "Approved",
-"Before → After" is amber "Changes requested". Each section carries its own state until
-every one is approved.
-
-> **Useful? Star it so other developers can find it.**
-
 ## How it works
 
 **Reviewer mode.** Point it at a PR, or at a local branch that doesn't have one yet. It
@@ -80,8 +63,20 @@ template and stands on its own.
 Both modes avoid mermaid diagrams, file-by-file changelogs and method-name dumps, and
 Author mode never opens the PR for you.
 
+## Example output
+
+![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
+The before panel shows one-request-per-image calls hitting a red `429` and stalling the
+rest of the batch; the after panel shows the single `?bundle` request unpacking into
+file chips instead.
+
+![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
+Two adjacent sections, two independent verdicts: "Description" is green "Approved",
+"Before → After" is amber "Changes requested". Each section carries its own state until
+every one is approved.
+
 <details>
-<summary><strong>Example output</strong> (a generated PR body)</summary>
+<summary><strong>The generated Markdown PR body</strong></summary>
 
 A made-up scenario: a service that downloaded product thumbnails one at a time, hit a
 CDN rate limit, and now fetches a whole category as a single bundle.
@@ -115,6 +110,21 @@ The HTML companion renders the same before/after as styled panels. Both files li
 
 </details>
 
+> **Useful? Star it so other developers can find it.**
+
+## Works with
+
+Any coding agent that loads `SKILL.md` files: **Claude Code**, **OpenCode**, **Cursor**,
+**Codex** and [70+ more](https://github.com/vercel-labs/skills#supported-agents). The
+[`skills` CLI](https://github.com/vercel-labs/skills) detects yours and installs to the
+right directory.
+
+| Requirement | Author mode | Reviewer mode |
+|---|---|---|
+| `git` and a browser | Required | Required |
+| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
+| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
+
 ## Installation
 
 ```bash
@@ -124,12 +134,6 @@ npx skills add hamedghaderi/pr-narrative
 The CLI clones the repo, finds the `pr-narrative` skill, detects your agent, and
 installs it to the right directory. For flags like `--list`, `-g` and `--copy`, see the
 [`skills` CLI docs](https://github.com/vercel-labs/skills).
-
-| Requirement | Author mode | Reviewer mode |
-|---|---|---|
-| `git` and a browser | Required | Required |
-| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
-| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
 
 <details>
 <summary><strong>Manual install (clone and copy)</strong></summary>

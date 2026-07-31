@@ -15,16 +15,6 @@ npx skills add hamedghaderi/pr-narrative
 
 https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
 
-[`ai-agent`](https://github.com/topics/ai-agent) ·
-[`code-review`](https://github.com/topics/code-review) ·
-[`pull-request`](https://github.com/topics/pull-request) ·
-[`developer-tools`](https://github.com/topics/developer-tools) ·
-[`claude-code`](https://github.com/topics/claude-code) ·
-[`opencode`](https://github.com/topics/opencode) ·
-[`codex`](https://github.com/topics/codex) ·
-[`cursor`](https://github.com/topics/cursor) ·
-[`agent-skills`](https://github.com/topics/agent-skills)
-
 ## Why not just ask an agent to review the PR?
 
 You can, and it will find real things. The gap isn't analysis quality, it's what

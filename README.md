@@ -180,6 +180,38 @@ Two adjacent sections, two independent verdicts: "Description" is already green
 comment already filled in ("Mention the CDN concurrency limit here so reviewers know
 the retry budget."). Each section carries its own state until every one is approved.
 
+## Why not just ask an agent to review the PR?
+
+You can, and it will find real things. The gap isn't analysis quality, it's what
+happens to the findings afterwards.
+
+Ask an agent to review a PR and you get prose in a terminal. It isn't attached to any
+line, your teammates can't see it, and nothing on the PR itself changes. You're left
+re-typing the useful parts into GitHub by hand, which is where most of them quietly
+get dropped.
+
+| | Plain agent prompt | Reviewer mode |
+|---|---|---|
+| Where findings land | Terminal scrollback | A pending review on the PR, anchored to real diff lines |
+| How many you get | However many it feels like writing | Hard cap: 3 per file, 10 per review |
+| What it comments on | Anything, including style opinions | Four categories only: probable bugs, security, missing error handling, breaking-change risk |
+| Who decides what counts | Already written; you skim it | Every AI finding arrives unaccepted. Nothing reaches GitHub until you click Accept |
+| Who signs the review | Ambiguous | You do. It posts as pending and never sets Approve, Request changes, or Comment |
+
+The cap is the constraint that matters most. An unconstrained agent has no reason to
+stop at three findings in a file, so it writes eleven, and the two that mattered get
+buried under nine that didn't. Forcing a ceiling forces a ranking decision before the
+page ever reaches you.
+
+Seeding zero findings is an explicitly valid outcome. When nothing in the diff clears
+the bar, the page opens with no AI comments at all rather than manufacturing something
+so the feature looks busy.
+
+Nothing is posted on your behalf either. Accepted comments land as a *pending* review
+that you finalize on github.com. Reviewing a local branch with no PR yet posts nothing
+anywhere: you get a fix-list that closes by asking you to mark each finding Confirmed,
+Partly, Not a bug, or Intended before a line of code is touched.
+
 ## Installation
 
 This is an agent skill (a `SKILL.md` plus reference files). The easiest way to install

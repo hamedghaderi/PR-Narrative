@@ -3,16 +3,16 @@
 This document is the single source of truth for the shapes that reviewer mode passes
 between its pieces: `scripts/diff_anchor.py`, `scripts/build_review.py`,
 `scripts/review_server.py`, and `assets/review-template.html`. Every later task copies
-these field names and types verbatim — do not rename or restructure them downstream.
+these field names and types verbatim; do not rename or restructure them downstream.
 
 There are four contracts:
 
-1. The **annotation object** — one comment, drawn by the user or pre-seeded by the AI.
-2. The **diff JSON contract** — the payload the agent injects into
+1. The **annotation object**: one comment, drawn by the user or pre-seeded by the AI.
+2. The **diff JSON contract**: the payload the agent injects into
    `assets/review-template.html` so it can render the diff and narrative.
-3. The **server submission payload** — what the browser POSTs back to
+3. The **server submission payload**: what the browser POSTs back to
    `scripts/review_server.py` when the user clicks Submit.
-4. The **fix-list artifact** — the Markdown file produced in local mode (no PR, nothing
+4. The **fix-list artifact**: the Markdown file produced in local mode (no PR, nothing
    posted to GitHub).
 
 Only GitHub is supported. There are no GitLab or Bitbucket fields anywhere below.
@@ -21,7 +21,7 @@ Only GitHub is supported. There are no GitLab or Bitbucket fields anywhere below
 
 ## 1. Annotation object
 
-An annotation is one piece of feedback — a line comment, a suggested-code edit, a
+An annotation is one piece of feedback: a line comment, a suggested-code edit, a
 file-level note, or a general review comment. Its fields are chosen so it maps
 directly onto a GitHub pending-review comment (see `references/github-posting.md` for
 the `gh api` side of that mapping).
@@ -29,20 +29,20 @@ the `gh api` side of that mapping).
 | Field          | Type                                          | Required               | Notes                                                                                                          |
 | -------------- | --------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `id`           | `string`                                       | yes                     | Stable within one review session (e.g. `"a-1"`, a short uuid, or a counter). Used for accept/edit/discard in the UI. |
-| `scope`        | `"line" \| "file" \| "general"`                | yes                     | `line` — anchored to a line range. `file` — about the file as a whole. `general` — about the PR as a whole.        |
+| `scope`        | `"line" \| "file" \| "general"`                | yes                     | `line`: anchored to a line range. `file`: about the file as a whole. `general`: about the PR as a whole.        |
 | `type`         | `"comment" \| "suggestion" \| "concern"`       | yes                     | `suggestion` carries `suggestedCode`; `concern` is a flagged risk (used by AI pre-seed) with no code attached.      |
-| `filePath`     | `string` \| `null`                             | required if `scope !== "general"` | The **NEW-file path**, taken from the diff entry's `filename` field. **Never** read `previous_filename` — a renamed file is addressed by its current name only. `null` for `scope: "general"`. |
+| `filePath`     | `string` \| `null`                             | required if `scope !== "general"` | The **NEW-file path**, taken from the diff entry's `filename` field. **Never** read `previous_filename`; a renamed file is addressed by its current name only. `null` for `scope: "general"`. |
 | `lineStart`    | `integer` \| `null`                            | required if `scope === "line"` | First line of the range. `null` for `scope: "file"` or `scope: "general"`.                                          |
 | `lineEnd`      | `integer` \| `null`                            | required if `scope === "line"` | Last line of the range (equal to `lineStart` for a single-line comment).                                            |
 | `side`         | `"RIGHT" \| "LEFT"` \| `null`                  | required if `scope === "line"` | `RIGHT` = the new file (added or unchanged/context lines). `LEFT` = the old file (deleted lines). `lineStart`/`lineEnd` are new-file line numbers when `side` is `RIGHT`, old-file line numbers when `side` is `LEFT`. `null` for `scope: "file"` or `scope: "general"`. |
-| `body`         | `string` (markdown)                            | yes                     | The comment text. For `type: "suggestion"`, this is the human-readable explanation — the code itself goes in `suggestedCode`, not inline in `body`. |
-| `suggestedCode`| `string`                                       | only for `type: "suggestion"` | Raw replacement code, **no** ```` ```suggestion ```` fence around it. The payload builder (`scripts/build_review.py`) wraps it in the fence when it builds the GitHub comment body — the annotation object itself stores unwrapped code. |
+| `body`         | `string` (markdown)                            | yes                     | The comment text. For `type: "suggestion"`, this is the human-readable explanation; the code itself goes in `suggestedCode`, not inline in `body`. |
+| `suggestedCode`| `string`                                       | only for `type: "suggestion"` | Raw replacement code, **no** ```` ```suggestion ```` fence around it. The payload builder (`scripts/build_review.py`) wraps it in the fence when it builds the GitHub comment body; the annotation object itself stores unwrapped code. |
 | `origin`       | `"user" \| "ai"`                               | yes                     | Who authored the annotation.                                                                                       |
-| `accepted`     | `boolean`                                      | yes                     | **Default rule (state this explicitly, it is load-bearing): AI annotations (`origin: "ai"`) default to `accepted: false`. User annotations (`origin: "user"`) default to `accepted: true`.** Only annotations with `accepted: true` at submit time are included in a GitHub pending review — see the payload builder contract in `references/annotation-schema.md#4-fix-list-artifact-local-mode` and the filtering rule in `scripts/build_review.py`. |
-| `severity`     | `"important" \| "nit" \| "pre_existing"`       | optional, AI only       | Never set by user annotations. No other severity values exist — do not invent new ones (e.g. no `"blocker"`, no `"minor"`). |
+| `accepted`     | `boolean`                                      | yes                     | **Default rule (state this explicitly, it is load-bearing): AI annotations (`origin: "ai"`) default to `accepted: false`. User annotations (`origin: "user"`) default to `accepted: true`.** Only annotations with `accepted: true` at submit time are included in a GitHub pending review; see the payload builder contract in `references/annotation-schema.md#4-fix-list-artifact-local-mode` and the filtering rule in `scripts/build_review.py`. |
+| `severity`     | `"important" \| "nit" \| "pre_existing"`       | optional, AI only       | Never set by user annotations. No other severity values exist; do not invent new ones (e.g. no `"blocker"`, no `"minor"`). |
 | `reasoning`    | `string`                                       | optional, AI only       | One sentence explaining why the AI flagged this line. Never set by user annotations. |
 
-### Worked example — annotation array
+### Worked example: annotation array
 
 Three annotations: one user line comment, one AI suggestion (untriaged, so
 `accepted: false`), and one AI concern with severity/reasoning.
@@ -109,11 +109,11 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 
 | Field           | Type                     | Notes                                                                                   |
 | --------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
-| `mode`          | `"pr" \| "local"`        | `pr` — a real GitHub PR is being reviewed. `local` — a local branch with no PR.            |
+| `mode`          | `"pr" \| "local"`        | `pr`: a real GitHub PR is being reviewed. `local`: a local branch with no PR.            |
 | `repo`          | `string` \| `null`       | `"owner/repo"`. `null` in local mode.                                                     |
 | `prNumber`      | `integer` \| `null`      | `null` in local mode.                                                                     |
 | `prUrl`         | `string` \| `null`       | Full `https://github.com/...` URL. `null` in local mode.                                  |
-| `branch`        | `string`                 | Branch name — used in the fix-list filename and the local-mode localStorage key.           |
+| `branch`        | `string`                 | Branch name: used in the fix-list filename and the local-mode localStorage key.           |
 | `headRefOid`    | `string` \| `null`       | The commit SHA the diff was generated against. `null` in local mode (no commit_id needed). |
 | `narrativeHtml` | `string` (HTML fragment) | The Background/core-idea explainer, pre-rendered HTML, substituted into `__NARRATIVE_HTML__`. |
 | `files`         | `array` of file objects  | See below. Capped at 30 fully-rendered entries (see `overflowFiles`).                      |
@@ -129,7 +129,7 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 | `additions` | `integer` | Lines added in this file.                                                                   |
 | `deletions` | `integer` | Lines removed in this file.                                                                  |
 | `hunks`     | `array`   | See below. Empty array if the file has no textual patch (binary, huge, or rename-only).       |
-| `truncated` | `boolean` | `true` when no patch was available (binary/huge/rename-only) — the UI shows "no diff to render" instead of an empty hunk list. |
+| `truncated` | `boolean` | `true` when no patch was available (binary/huge/rename-only); the UI shows "no diff to render" instead of an empty hunk list. |
 
 #### Hunk object (`files[].hunks[]`)
 
@@ -163,9 +163,9 @@ links straight to github.com to view the real diff:
 | `filename`  | `string`  | New-file path.                                  |
 | `additions` | `integer` | Lines added.                                    |
 | `deletions` | `integer` | Lines removed.                                  |
-| `url`       | `string`  | Direct github.com link to that file's diff (`prUrl` + `/files#diff-...`, or the file blob URL in local mode where no PR exists — in local mode this can be a relative path note instead of a live link). |
+| `url`       | `string`  | Direct github.com link to that file's diff (`prUrl` + `/files#diff-...`, or the file blob URL in local mode where no PR exists; in local mode this can be a relative path note instead of a live link). |
 
-### Worked example — diff JSON
+### Worked example: diff JSON
 
 A 2-file PR diff plus one file pushed into `overflowFiles` (illustrating the 30-file
 cap; in a real diff this array would only be non-empty once the 31st file appears).
@@ -267,7 +267,7 @@ that goes into `overflowFiles[]` instead of being dropped silently.
 
 This is what the browser POSTs to `scripts/review_server.py` when the user clicks
 **Submit review** on the reviewer-mode page. `scripts/review_server.py` already
-handles one payload shape — the existing author-mode decisions object documented in
+handles one payload shape: the existing author-mode decisions object documented in
 `references/review-ui.md` (`{ branch, generated_at, overall, sections: [...] }`, no
 `kind` field). The reviewer-mode payload below is a **deliberately different shape**,
 so the server discriminates between the two solely on the presence and value of the
@@ -280,20 +280,20 @@ so the server discriminates between the two solely on the presence and value of 
   parse as this contract; otherwise fall back to the author-mode shape.
 
 Both are written to the same `--out` file path as-is (whichever one arrived), and both
-resolve the server's single-shot wait exactly the same way — the server does not need
+resolve the server's single-shot wait exactly the same way; the server does not need
 to understand the annotation contents, only route on `kind`.
 
 | Field            | Type                       | Notes                                                                                     |
 | ---------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
 | `kind`           | `"review-annotations"`     | Literal discriminator string. Always this exact value for reviewer-mode submissions.            |
-| `mode`           | `"pr" \| "local"`          | Mirrors the diff JSON's `mode` — tells the agent whether to post to GitHub or write a fix-list. |
+| `mode`           | `"pr" \| "local"`          | Mirrors the diff JSON's `mode`: tells the agent whether to post to GitHub or write a fix-list. |
 | `repo`           | `string` \| `null`         | `"owner/repo"`, `null` in local mode.                                                          |
 | `prNumber`       | `integer` \| `null`        | `null` in local mode.                                                                          |
 | `branch`         | `string`                   | Branch name.                                                                                    |
 | `generalComment` | `string`                   | The sticky-footer general comment box; may be `""` if the user left it empty.                  |
-| `annotations`    | `array` of annotation objects | Every annotation currently in the page's state — user-authored ones plus any AI drafts the user accepted, edited, or left untouched. `accepted` reflects the user's triage choices at submit time; **filtering to `accepted: true` happens downstream in `scripts/build_review.py`, not in this payload.** |
+| `annotations`    | `array` of annotation objects | Every annotation currently in the page's state: user-authored ones plus any AI drafts the user accepted, edited, or left untouched. `accepted` reflects the user's triage choices at submit time; **filtering to `accepted: true` happens downstream in `scripts/build_review.py`, not in this payload.** |
 
-### Worked example — server submission payload
+### Worked example: server submission payload
 
 ```json
 {
@@ -302,7 +302,7 @@ to understand the annotation contents, only route on `kind`.
   "repo": "acme/catalog-service",
   "prNumber": 482,
   "branch": "fix/date-parsing-guard",
-  "generalComment": "Nice fix overall — just want to make sure we don't silently break existing callers.",
+  "generalComment": "Nice fix overall, just want to make sure we don't silently break existing callers.",
   "annotations": [
     {
       "id": "a-1",
@@ -359,7 +359,7 @@ into GitHub comments; `a-3` is dropped from the pending review because
 
 ## 4. Fix-list artifact (local mode)
 
-When `mode: "local"` (no PR — a local branch being reviewed against its base), nothing
+When `mode: "local"` (no PR, a local branch being reviewed against its base), nothing
 is posted to GitHub. Instead the agent renders the submitted annotations into a
 Markdown fix-list and hands it to the user directly.
 
@@ -383,14 +383,14 @@ convention already used for `/tmp/YYYY-MM-DD-pr-review-<branch>.html` in author 
 Plannotator-style: grouped per file, line comments first (with a
 `lineStart-lineEnd (side)` header and any suggested-code fence), then a trailing
 General section for `scope: "general"` annotations and the `generalComment` text. Only
-annotations with `accepted: true` are included — the same filter used before posting to
+annotations with `accepted: true` are included, the same filter used before posting to
 GitHub, so the fix-list and a would-be pending review always agree on which findings
 made the cut.
 
-### Worked example — fix-list markdown
+### Worked example: fix-list markdown
 
 ```markdown
-# Review fix-list — fix/date-parsing-guard
+# Review fix-list: fix/date-parsing-guard
 
 Generated 2026-07-22. Local branch review, nothing posted to GitHub.
 
@@ -400,7 +400,7 @@ Generated 2026-07-22. Local branch review, nothing posted to GitHub.
 
 Do we need to support Date instances directly here, or is d always a string/number?
 
-### Lines 13-15 (RIGHT) — suggestion
+### Lines 13-15 (RIGHT): suggestion
 
 Throwing here changes the function's contract for existing callers that pass bad
 input and expect an empty string back. Consider returning '' instead, matching the
@@ -414,7 +414,7 @@ existing !d branch above.
 
 ## General
 
-Nice fix overall — just want to make sure we don't silently break existing callers.
+Nice fix overall, just want to make sure we don't silently break existing callers.
 
 ---
 
@@ -425,11 +425,11 @@ have discussed the verdicts.
 ```
 
 (The ​```suggestion fence above is written with a zero-width-space escape purely so
-this reference document's own code fence doesn't terminate early — the real fix-list
+this reference document's own code fence doesn't terminate early; the real fix-list
 file uses a plain, unescaped ` ```suggestion ` fence.)
 
-The trailing handoff paragraph — from `Treat the findings above as unverified review
-input` through `until we have discussed the verdicts.` — is **mandatory** and must be
+The trailing handoff paragraph (from `Treat the findings above as unverified review
+input` through `until we have discussed the verdicts.`) is **mandatory** and must be
 appended verbatim (word-for-word, including the `Confirmed / Partly / Not a bug /
 Intended` list) at the end of every fix-list file. It is what stops the agent from
 racing ahead and "fixing" findings the user hasn't actually confirmed.
@@ -442,10 +442,10 @@ A quick reference for implementers wiring these contracts together:
 
 | Concept                     | Field name everywhere it appears                                    |
 | ---------------------------- | --------------------------------------------------------------------- |
-| New-file path                | `filePath` (annotation), `filename` (diff JSON per-file/overflow entry) — **never `previous_filename`**, even for renamed files |
+| New-file path                | `filePath` (annotation), `filename` (diff JSON per-file/overflow entry); **never `previous_filename`**, even for renamed files |
 | Anchor side                  | `side`: `"RIGHT"` (new/context) \| `"LEFT"` (deleted)                  |
 | AI vs. user                  | `origin`: `"ai"` \| `"user"`                                          |
-| Triage state                 | `accepted`: boolean — **AI default `false`, user default `true`**      |
+| Triage state                 | `accepted`: boolean; **AI default `false`, user default `true`**      |
 | Payload discriminator        | `kind: "review-annotations"` (reviewer mode) vs. no `kind` field at all (author mode, `references/review-ui.md`) |
 | File render cap              | 30 files fully rendered in `files[]`; the rest go to `overflowFiles[]` |
 | Local fix-list filename token | literal substring `review-fixlist` in `/tmp/YYYY-MM-DD-review-fixlist-<branch>.md` |

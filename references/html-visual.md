@@ -1,9 +1,9 @@
-# Styled HTML visual — CSS, panels, and worked example
+# Styled HTML visual: CSS, panels, and worked example
 
 This is the artifact that gives a PR the look people love: real HTML/CSS before/after
 panels with colored request rows, a red failure, an "extract locally" step, and
 little file chips. Build it as a single self-contained `.html` file with inline CSS,
-saved to `/tmp/YYYY-MM-DD-pr-<branch>.html`. No mermaid, no ASCII art — use the HTML
+saved to `/tmp/YYYY-MM-DD-pr-<branch>.html`. No mermaid, no ASCII art; use the HTML
 below.
 
 All the example content here uses a generic, invented scenario (batching image
@@ -30,7 +30,7 @@ the panels feel native when screenshots land in a PR.
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PR — <short change title></title>
+<title>PR: <short change title></title>
 <style>
   :root{
     --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
@@ -93,26 +93,26 @@ the new path (one bulk request, extract, chips). Put concrete toy data in every 
 
 <div class="visual-grid">
   <div class="panel">
-    <div class="panel-head before">Before — one GET per image</div>
+    <div class="panel-head before">Before: one GET per image</div>
     <div class="panel-body">
       <div class="req-row"><span class="path">GET <b>shoes/img-001</b>.jpg</span><span class="badge badge-200">200</span></div>
       <div class="req-row"><span class="path">GET <b>shoes/img-002</b>.jpg</span><span class="badge badge-200">200</span></div>
       <div class="req-row"><span class="path">GET <b>shoes/img-003</b>.jpg</span><span class="badge badge-429">429</span></div>
-      <div class="note-inline">Rate limited — rebuild throws, remaining images never requested</div>
+      <div class="note-inline">Rate limited: rebuild throws, remaining images never requested</div>
       <div class="req-row dim"><span class="path">GET <b>shoes/img-004</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
       <div class="req-row dim"><span class="path">… more never attempted</span></div>
     </div>
   </div>
 
   <div class="panel">
-    <div class="panel-head after">After — one GET per category folder</div>
+    <div class="panel-head after">After: one GET per category folder</div>
     <div class="panel-body">
       <div class="req-row"><span class="path">GET <b>/shoes</b>?bundle</span><span class="badge badge-200">200 → shoes.zip</span></div>
-      <div class="step-box"><div class="arrow-in">↓</div>Unpack locally — no further network calls</div>
+      <div class="step-box"><div class="arrow-in">↓</div>Unpack locally, no further network calls</div>
       <div class="chips">
         <span class="chip">img-001.jpg</span><span class="chip">img-002.jpg</span>
         <span class="chip more">+40 more matched</span>
-        <span class="chip miss">img-019.jpg — missing</span>
+        <span class="chip miss">img-019.jpg (missing)</span>
       </div>
       <div class="fallback-box"><b>Fallback (1 image):</b> not in the archive → individual download, same as before.</div>
     </div>
@@ -139,7 +139,7 @@ Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
   single-page path is untouched.
 </div>
 <div class="callout tip"><b>Tip</b>
-  A missing image or a failed bundle falls back to an individual download — worst case,
+  A missing image or a failed bundle falls back to an individual download. Worst case,
   no worse than before.
 </div>
 ```
@@ -167,6 +167,6 @@ Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
 ## 5. Full worked example
 
 A complete, self-contained HTML file for the generic thumbnail-batching change lives
-alongside this reference at `examples/pr-thumbnails.html` — open it in a browser to see
+alongside this reference at `examples/pr-thumbnails.html`; open it in a browser to see
 the target quality bar (narrative + styled before/after, no mermaid, no method dumps).
 Copy its structure and swap in the real change you're documenting.

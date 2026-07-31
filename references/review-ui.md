@@ -1,4 +1,4 @@
-# Interactive review UI — the approve/reject HTML
+# Interactive review UI: the approve/reject HTML
 
 This is what makes the skill *interactive* rather than a static write-up. The page
 shows a **section-by-section review**: each part of the PR gets **Approve / Request
@@ -20,13 +20,13 @@ so it still works if opened without the server.
    `<meta name="pr-review-live" content="1">` marker into the page it serves.
    With `--open`, it also attempts to open the URL in the browser and prints either
    `PR_REVIEW_OPEN_OK <url>` (a launcher succeeded) or `PR_REVIEW_OPEN_FAILED <url>`
-   (all launchers failed — the agent must then echo the URL prominently for the user to
+   (all launchers failed, so the agent must then echo the URL prominently for the user to
    click manually). See SKILL.md §3 for the full bash block with sentinel polling and
    the conditional shell-level fallback.
 2. The browser opens the review page (or the user clicks the printed URL). The page sees
    the live marker and switches its Submit button to **POST `/submit`** instead of
    downloading a file.
-3. The user reviews each section (Approve / Request change + comments — choices are
+3. The user reviews each section (Approve / Request change + comments; choices are
    mirrored to `localStorage` so a refresh won't lose them) and clicks **Submit**.
 4. The POST body is the decisions JSON; the server writes it atomically to `--out` and
    shuts down (printing `PR_REVIEW_DONE`). The agent reads that file and revises.
@@ -67,7 +67,7 @@ copies the embedded Markdown body to the clipboard and contributes nothing to th
 
 Reuse the base CSS palette from `html-visual.md` (GitHub-native colors) so the review
 page looks consistent with the visual companion. Render the real PR content the skill
-generated — the actual Background prose, the styled before/after panels, tables — each
+generated (the actual Background prose, the styled before/after panels, tables), each
 wrapped in a `<section data-review-id="...">` with a review control bar underneath.
 
 ### Section wrapper + control bar
@@ -124,7 +124,7 @@ Give every reviewable block a stable `data-review-id` and drop in the control ba
 
 Put this near the top of `<body>`, before the sections. The Submit button's label is
 set by the JS depending on whether the live server is present. **Copy PR description**
-sits between Reset and Submit and reuses the existing `.secondary` style — every
+sits between Reset and Submit and reuses the existing `.secondary` style; every
 generated page must include it:
 
 ```html
@@ -138,7 +138,7 @@ generated page must include it:
 ```
 
 The three existing ids (`rv-progress`, `rv-reset`, `rv-submit`) keep their meaning
-exactly; `rv-copy-md` is additive and stateless — it never reads or writes
+exactly; `rv-copy-md` is additive and stateless. It never reads or writes
 `localStorage`, never touches `buildPayload()`, and has no bearing on the decisions
 JSON. It exists so the reviewer can lift the Markdown body straight out of the page
 they just read, instead of the agent pasting a wall of Markdown into the terminal.
@@ -147,7 +147,7 @@ they just read, instead of the agent pasting a wall of Markdown into the termina
 
 The copy button needs the Markdown to copy, so the agent embeds the full PR body in
 the page as an inert JSON payload. Put it anywhere in `<body>` (next to the action bar
-is fine) — it renders nothing:
+is fine) and it renders nothing:
 
 ```html
 <script type="application/json" id="pr-body-md">JSON_ENCODED_BODY</script>
@@ -161,12 +161,12 @@ json.dumps(md_body).replace("</", "<\\/")
 
 **Both halves are mandatory.**
 
-- `json.dumps` gives you one valid JSON string literal — quotes, newlines, backslashes
-  and tabs all escaped — so the whole multi-line Markdown body survives as a single
+- `json.dumps` gives you one valid JSON string literal (quotes, newlines, backslashes,
+  and tabs all escaped) so the whole multi-line Markdown body survives as a single
   token that `JSON.parse` hands back verbatim.
 - `.replace("</", "<\\/")` is the part that's easy to skip and expensive to debug. A PR
   body routinely contains fenced code blocks, and any `</script>` inside one ends the
-  `script` element at **HTML-parse time** — before any JavaScript runs. The browser
+  `script` element at **HTML-parse time**, before any JavaScript runs. The browser
   doesn't care that the sequence is inside a JSON string; the tokenizer stops there and
   the rest of the page, including every review section and the submit JS, is silently
   truncated. (Git precedent: commit `6651321`. The same convention is spelled out for
@@ -179,7 +179,7 @@ json.dumps(md_body).replace("</", "<\\/")
 
 Two rules about the *content*:
 
-- **Body only — never the title.** GitHub takes the PR title in its own input field, so
+- **Body only, never the title.** GitHub takes the PR title in its own input field, so
   a title line pasted into the body box just becomes a stray heading the author has to
   delete. What's embedded is exactly what belongs in the description box.
 - **It's the current draft.** Each generated page carries the body as it stands for that
@@ -191,7 +191,7 @@ Two rules about the *content*:
 > The decisions JS collects every `.review-section` and reads its review-id, so a
 > wrapper would add a phantom entry to the `sections` array that can never be approved:
 > `#rv-progress` would report a denominator one too high and `overall` would be stuck at
-> `pending` forever. `#pr-body-md` is hidden, inert data — it stays outside the
+> `pending` forever. `#pr-body-md` is hidden, inert data; it stays outside the
 > reviewable sections entirely.
 
 ### Copy PR description JS
@@ -214,16 +214,16 @@ other. Include it as-is:
       ? navigator.clipboard.writeText(md)
       : Promise.reject(new Error("no clipboard API"));
     p.then(function () {
-      copyBtn.textContent = "✓ Copied — paste into GitHub";
+      copyBtn.textContent = "✓ Copied. Paste into GitHub";
       setTimeout(function () { copyBtn.textContent = original; }, 2000);
     }).catch(function () {
-      // Off-screen textarea fallback (NOT display:none — hidden elements can't be selected).
+      // Off-screen textarea fallback (NOT display:none; hidden elements can't be selected).
       var ta = document.createElement("textarea");
       ta.value = md;
       ta.style.cssText = "position:fixed;left:-9999px;top:0";
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand("copy"); copyBtn.textContent = "✓ Copied — paste into GitHub"; }
+      try { document.execCommand("copy"); copyBtn.textContent = "✓ Copied. Paste into GitHub"; }
       catch (e) { copyBtn.textContent = "Copy failed"; }
       setTimeout(function () { copyBtn.textContent = original; document.body.removeChild(ta); }, 2000);
     });
@@ -236,7 +236,7 @@ Three details that are load-bearing, not style:
 
 - **`writeText` is called synchronously inside the handler.** The promise it returns may
   resolve later, but the call itself has to happen while the click's transient user
-  activation is still alive — Safari discards that activation the moment anything is
+  activation is still alive; Safari discards that activation the moment anything is
   awaited first, and the copy silently fails.
 - **The fallback textarea is positioned off-screen, not hidden.** `position:fixed;
   left:-9999px` keeps it selectable; `display:none` or `visibility:hidden` would make
@@ -249,7 +249,7 @@ This works in both modes. In live mode the page is served from
 `http://127.0.0.1:<port>/`, which is a secure context, so the async Clipboard API is
 normally available. In `file://` mode the button matters more, not less: `SKILL.md`
 tells the agent to skip the server and `open` the HTML directly when Python 3 isn't
-available, and in that situation the copy button is a **primary output path** — the
+  available, and in that situation the copy button is a **primary output path**: the
 reviewer can lift the finished PR body out of the page even with no server, no POST
 endpoint, and no terminal round-trip.
 
@@ -258,7 +258,7 @@ endpoint, and no terminal round-trip.
 This wires every section's buttons, tracks state, persists to `localStorage`, updates
 progress, and submits the decisions. It reads the branch from a
 `<body data-branch="…">` attribute, and detects live mode from the
-`<meta name="pr-review-live">` marker the server injects — POSTing to `/submit` when
+`<meta name="pr-review-live">` marker the server injects, and POSTs to `/submit` when
 live, or downloading `pr-review-decisions.json` as the fallback.
 
 ```html
@@ -356,7 +356,7 @@ live, or downloading `pr-review-decisions.json` as the fallback.
           body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        submitBtn.textContent = "✓ Sent — you can close this tab";
+        submitBtn.textContent = "✓ Sent. You can close this tab";
       } catch (e) {
         // Server gone? Fall back to a download so the review isn't lost.
         submitBtn.disabled = false;
@@ -391,7 +391,7 @@ exported more than once).
 Then, regardless of mode:
 
 1. If `overall` is `approved`, finalize the Markdown body **verbatim** as approved and
-   hand it over. No post-approval edits — not a reworded sentence, not a tightened
+   hand it over. No post-approval edits: not a reworded sentence, not a tightened
    heading. The reviewer approved a specific text, and the copy button on the page they
    approved put that exact text on their clipboard; changing it afterwards would mean
    the clipboard and the "final" body disagree, silently. The last served page's Copy

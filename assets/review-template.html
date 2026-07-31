@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PR review — annotate diff</title>
+<title>PR review: annotate diff</title>
 <style>
   :root{
     --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
@@ -145,7 +145,7 @@
 
   <section class="panel" id="narrative-panel">
     <div class="panel-head" data-toggle="narrative-panel">
-      <span>Narrative — why this change exists</span>
+      <span>Narrative: why this change exists</span>
       <span class="toggle">▾ collapse</span>
     </div>
     <div class="panel-body">
@@ -179,13 +179,13 @@
   ============================ INJECTION POINTS ============================
   The agent replaces exactly two markers when it builds a page from this
   template (each marker appears once, and only once, in this file):
-    1. The REVIEW-DATA marker inside the script#review-data tag below — the T1
+    1. The REVIEW-DATA marker inside the script#review-data tag below: the T1
        "Diff JSON contract" object (references/annotation-schema.md §2).
        Escape "</" as "<\/" in the dumped JSON (json.dumps(...).replace("</",
        "<\\/")): a diff containing "</script>" would otherwise close that
        script element at HTML-parse time and truncate the data
        (references/reviewer-ui.md §1).
-    2. The NARRATIVE-HTML marker inside div#narrative above — the pre-rendered
+    2. The NARRATIVE-HTML marker inside div#narrative above: the pre-rendered
        narrative HTML fragment.
   ========================================================================
 
@@ -195,7 +195,7 @@
     1. Copy this file:  cp assets/review-template.html /tmp/review-standalone.html
     2. In the copy, overwrite the REVIEW-DATA marker (the placeholder text inside
        the script#review-data tag) with the T1 worked-example Diff JSON from
-       references/annotation-schema.md §2 ("Worked example — diff JSON").
+       references/annotation-schema.md §2 ("Worked example: diff JSON").
     3. Overwrite the NARRATIVE-HTML marker (inside div#narrative) with any HTML
        fragment, e.g. the narrativeHtml string from that same §2 example.
     4. Serve the folder and open the copy in a browser:
@@ -233,7 +233,7 @@
 
   var isLive = !!document.querySelector('meta[name="pr-review-live"]');
 
-  // Reviewer-namespaced key ONLY — must never collide with author mode's "pr-review:<branch>".
+  // Reviewer-namespaced key ONLY; must never collide with author mode's "pr-review:<branch>".
   var STORE_KEY;
   if (DATA.mode === "pr" && DATA.repo != null && DATA.prNumber != null) {
     STORE_KEY = "pr-review:reviewer:" + DATA.repo + "/" + DATA.prNumber;
@@ -318,12 +318,12 @@
     var title = document.getElementById("page-title");
     if (DATA.mode === "pr") {
       b.className = "mode-banner";
-      b.innerHTML = "<b>PR mode</b>Submitting creates a PENDING review on GitHub — you finalize the verdict there.";
+      b.innerHTML = "<b>PR mode</b>Submitting creates a PENDING review on GitHub. You finalize the verdict there.";
       var label = (DATA.repo || "") + (DATA.prNumber != null ? " #" + DATA.prNumber : "");
       title.textContent = "Review " + (label.trim() || "pull request");
     } else {
       b.className = "mode-banner local";
-      b.innerHTML = "<b>Local mode</b>Annotations return to the agent as a fix-list — nothing is posted.";
+      b.innerHTML = "<b>Local mode</b>Annotations return to the agent as a fix-list. Nothing is posted.";
       title.textContent = "Review branch " + (DATA.branch || "");
     }
   }
@@ -688,7 +688,7 @@
     if (!overflowFiles.length) return;
     var box = el("div", "overflow");
     box.appendChild(el("h3", null, overflowFiles.length + " more file" +
-      (overflowFiles.length === 1 ? "" : "s") + " — view on GitHub"));
+      (overflowFiles.length === 1 ? "" : "s") + " (view on GitHub)"));
     var ul = document.createElement("ul");
     overflowFiles.forEach(function (of) {
       var li = document.createElement("li");
@@ -775,7 +775,7 @@
   // Format is annotation-schema.md §4 verbatim, with ONE deliberate omission:
   // the mandatory handoff paragraph. That paragraph is the agent's guard against
   // "fixing" unconfirmed findings, so it belongs on the agent's printed copy of
-  // the file — pasting it into a GitHub comment would only confuse the author.
+  // the file; pasting it into a GitHub comment would only confuse the author.
   function buildFixlistMarkdown() {
     var today = new Date().toISOString().split("T")[0];
     var branch = DATA.branch || "unknown";
@@ -793,7 +793,7 @@
     });
 
     var lines = [];
-    lines.push("# Review fix-list — " + branch);
+    lines.push("# Review fix-list: " + branch);
     lines.push("");
     lines.push("Generated " + today + ". Local branch review, nothing posted to GitHub.");
     lines.push("");
@@ -816,7 +816,7 @@
             ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
           var isSuggestion = a.type === "suggestion";
           lines.push("### Lines " + rangeStr + " (" + a.side + ")" +
-            (isSuggestion ? " — suggestion" : ""));
+            (isSuggestion ? ": suggestion" : ""));
           lines.push("");
           lines.push(a.body || "");
           lines.push("");
@@ -856,7 +856,7 @@
   var downloadBtn = document.getElementById("download-btn");
   var copyFixlistBtn = document.getElementById("copy-fixlist-btn");
   if (!isLive) submitBtn.style.display = "none"; // no server → download only
-  // PR mode has no fix-list — accepted comments go to GitHub as a pending review.
+  // PR mode has no fix-list: accepted comments go to GitHub as a pending review.
   if (DATA.mode !== "local") copyFixlistBtn.style.display = "none";
 
   copyFixlistBtn.addEventListener("click", function () {
@@ -873,7 +873,7 @@
       btn.textContent = "✓ Copied";
       setTimeout(function () { btn.textContent = original; }, 2000);
     }).catch(function () {
-      // Off-screen, NOT display:none — hidden elements can't be selected.
+      // Off-screen, NOT display:none; hidden elements can't be selected.
       var ta = document.createElement("textarea");
       ta.value = md;
       ta.style.cssText = "position:fixed;left:-9999px;top:0";
@@ -902,7 +902,7 @@
       body: JSON.stringify(payload)
     }).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
-      submitBtn.textContent = "✓ Sent — you can close this tab";
+      submitBtn.textContent = "✓ Sent. You can close this tab";
     }).catch(function () {
       // Server gone? Fall back to a download so the review isn't lost.
       submitBtn.disabled = false;

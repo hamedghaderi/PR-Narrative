@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PR Review — Batch thumbnail downloads via CDN bundle</title>
+<title>PR Review: Batch thumbnail downloads via CDN bundle</title>
 <style>
   :root {
     --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
@@ -159,7 +159,7 @@
   <div class="visual-grid">
 
     <div class="panel">
-      <div class="panel-head before">Before — one GET per image</div>
+      <div class="panel-head before">Before: one GET per image</div>
       <div class="panel-body">
         <div class="req-row"><span class="path">GET <b>shoes/img-001</b>.jpg</span><span class="badge badge-200">200</span></div>
         <div class="req-row"><span class="path">GET <b>shoes/img-002</b>.jpg</span><span class="badge badge-200">200</span></div>
@@ -167,7 +167,7 @@
         <div class="req-row"><span class="path">GET <b>shoes/img-004</b>.jpg</span><span class="badge badge-200">200</span></div>
         <div class="req-row"><span class="path">GET <b>shoes/img-005</b>.jpg</span><span class="badge badge-200">200</span></div>
         <div class="req-row"><span class="path">GET <b>shoes/img-006</b>.jpg</span><span class="badge badge-429">429</span></div>
-        <div class="note-inline">Rate limited — rebuild throws, remaining 39 images never requested</div>
+        <div class="note-inline">Rate limited: rebuild throws, remaining 39 images never requested</div>
         <div class="req-row dim"><span class="path">GET <b>shoes/img-007</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
         <div class="req-row dim"><span class="path">GET <b>shoes/img-008</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
         <div class="req-row dim"><span class="path">… 37 more never attempted</span></div>
@@ -175,13 +175,13 @@
     </div>
 
     <div class="panel">
-      <div class="panel-head after">After — one GET per category folder</div>
+      <div class="panel-head after">After: one GET per category folder</div>
       <div class="panel-body">
         <div class="req-row"><span class="path">GET <b>/shoes</b>?bundle</span><span class="badge badge-200">200 → shoes.zip</span></div>
 
         <div class="step-box">
           <div class="arrow-in">↓</div>
-          Unpack locally — the <span class="mono">.zip</span> becomes an in-memory
+          Unpack locally: the <span class="mono">.zip</span> becomes an in-memory
           <span class="mono">id → image bytes</span> map, no further network calls
         </div>
 
@@ -190,7 +190,7 @@
           <span class="chip">img-002.jpg</span>
           <span class="chip">img-003.jpg</span>
           <span class="chip more">+40 more matched</span>
-          <span class="chip miss">img-019.jpg — missing</span>
+          <span class="chip miss">img-019.jpg (missing)</span>
         </div>
 
         <div class="fallback-box">
@@ -349,7 +349,7 @@
           body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        submitBtn.textContent = "✓ Sent — you can close this tab";
+        submitBtn.textContent = "✓ Sent. You can close this tab";
       } catch (e) {
         submitBtn.disabled = false;
         submitBtn.textContent = "⬇ Download decisions (server unreachable)";

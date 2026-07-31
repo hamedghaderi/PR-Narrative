@@ -47,7 +47,7 @@ Closes #123
 
 ### Affected areas & models
 
-- Thumbnail build pipeline — category and bulk-import downloads from the CDN
+- Thumbnail build pipeline: category and bulk-import downloads from the CDN
 - No change to the single-image, per-page path
 
 ### Should be tested by QA

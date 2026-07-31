@@ -1,8 +1,8 @@
-# Markdown PR body — conventions and worked example
+# Markdown PR body: conventions and worked example
 
 The Markdown body fills the repo's PR template and is complete on its own: a reviewer
 who never opens the HTML still gets the full narrative from GitHub-rendered Markdown.
-It never links back to the local review page — see §3.
+It never links back to the local review page (see §3).
 
 Write it as a short story a reviewer can follow without outside context, not a
 paraphrase of the ticket. Assume the reader hasn't read the ticket or the commit
@@ -29,7 +29,7 @@ change.
 
 ## 1. GitHub callout syntax
 
-GitHub renders these blockquote callouts natively — use them for definitions and edge
+GitHub renders these blockquote callouts natively; use them for definitions and edge
 cases (they mirror the Note/Tip panels in the HTML):
 
 ```markdown
@@ -38,7 +38,7 @@ cases (they mirror the Note/Tip panels in the HTML):
 > worth having.
 
 > [!TIP]
-> Small jobs (≤ 2 images) keep the old per-image path — the single-page case can't
+> Small jobs (≤ 2 images) keep the old per-image path, so the single-page case can't
 > regress.
 
 > [!WARNING]
@@ -68,7 +68,7 @@ Escape pipes inside cells as `\|`. Leave a blank line before the table.
 
 ## 3. No links to the local review page
 
-The PR body is pasted into GitHub — any local file path or loopback URL is dead the
+The PR body is pasted into GitHub, and any local file path or loopback URL is dead the
 moment it leaves your machine. Never embed the review page's local path or URL in the
 Markdown body. If a visual companion exists, mention it in conversation with the user
 ("the review page is at…"), not inside the body. The body has to stand on its own: a
@@ -77,7 +77,7 @@ reviewer on GitHub gets the full story with nothing to open locally.
 ```markdown
 > [!TIP]
 > A styled before/after walkthrough of this change was shared separately as a visual
-> companion — the Background and Description below tell the same story on their own.
+> companion. The Background and Description below tell the same story on their own.
 ```
 
 If the user wants the visual embedded some other way (drag-dropped screenshots in the
@@ -89,7 +89,7 @@ the skill never uploads or opens the PR.
 ## 4. Filling the repo's PR template
 
 Detect the repo's PR template (usually `.github/pull_request_template.md`) and keep its
-exact section headers and checklists. Many templates use a "why / how" shape — for
+exact section headers and checklists. Many templates use a "why / how" shape; for
 example a template with `## Background (Why?)` and `## Description (How?)` maps
 directly onto this skill:
 

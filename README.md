@@ -58,9 +58,9 @@ same page but posts nothing; Submit hands you back a fix-list instead.
 
 **Author mode** is the original pitch, sharpened by a code-first doctrine: it writes
 **pull-request descriptions as a short story sourced from the diff, not paraphrased
-from the ticket** — one a reviewer who's never read the ticket, including a junior
+from the ticket**: one a reviewer who's never read the ticket, including a junior
 developer on the team, can follow in a single read. Most PR descriptions are written
-for the author, not the reviewer — they list which files changed and restate the diff
+for the author, not the reviewer; they list which files changed and restate the diff
 in prose the reviewer can already see. This mode does the opposite: it gives the
 reviewer the *context* and the *mental model* they need before they read a single line
 of the diff, with every claim traceable back to the diff itself. It answers **"why
@@ -104,17 +104,17 @@ pending review on GitHub** (or a fix-list, for a local branch).
 
 Two artifacts, plus an interactive review loop:
 
-1. **An interactive HTML review page** — it **opens automatically in your browser**
+1. **An interactive HTML review page.** It **opens automatically in your browser**
    (when no tab opens automatically, the agent shows the URL to click) and shows the
-   rich visual (report-quality before/after panels — colored request
-   rows, a red failure, an "extract locally" step, file chips — and the
+   rich visual (report-quality before/after panels with colored request
+   rows, a red failure, an "extract locally" step and file chips, plus the
    Background/Description narrative), with **Approve / Request-change** controls and a
    comment box under each section. You review section by section and click **Submit**;
    your decisions go straight back to the agent via a small bundled local server
    (`scripts/review_server.py`, Python stdlib, no installs), which revises until every
    section is approved. If the server isn't running, the page falls back to a
-   **Download decisions** button. No mermaid, no ASCII art — real HTML/CSS.
-2. **A GitHub-flavored Markdown PR body** — fills your repo's PR template, is complete
+   **Download decisions** button. No mermaid, no ASCII art, just real HTML/CSS.
+2. **A GitHub-flavored Markdown PR body** that fills your repo's PR template, is complete
    on its own (a reviewer who never opens the HTML still gets the full story), and uses
    GitHub `> [!NOTE]` / `> [!TIP]` callouts and comparison tables. The review page
    itself carries a **📋 Copy PR description** button that copies this same body once
@@ -124,7 +124,7 @@ The loop is: **generate → auto-open review page → approve / request changes 
 section → download decisions → agent revises → re-open → repeat until approved.**
 
 It deliberately avoids **mermaid diagrams**, **file-by-file changelogs**, and
-**method-name dumps**. It never opens a PR for you — you get the files and decide when
+**method-name dumps**. It never opens a PR for you: you get the files and decide when
 to create the PR.
 
 > See [`examples/`](./examples) for a generated pair built from a generic, invented
@@ -133,7 +133,7 @@ to create the PR.
 
 ## Example output
 
-The examples use a made-up scenario — a service that downloaded product thumbnails one
+The examples use a made-up scenario: a service that downloaded product thumbnails one
 at a time (hitting a CDN rate limit) and now fetches a whole category as a single
 bundle. The Markdown body leads with the problem and the core idea, then shows a
 comparison table:
@@ -215,7 +215,7 @@ Partly, Not a bug, or Intended before a line of code is touched.
 ## Installation
 
 This is an agent skill (a `SKILL.md` plus reference files). The easiest way to install
-it is with the [`skills` CLI](https://github.com/vercel-labs/skills) — a package
+it is with the [`skills` CLI](https://github.com/vercel-labs/skills), a package
 manager for agent skills that uses GitHub as its registry and supports Claude Code,
 OpenCode, Cursor, Codex, and [70+ more agents](https://github.com/vercel-labs/skills#supported-agents).
 

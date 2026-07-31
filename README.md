@@ -6,8 +6,8 @@ Review pull requests as a story, not a wall of code.
 
 PR Narrative gives coding agents two workflows:
 
-- **Author Mode:** turns your branch diff into a reviewer-friendly PR description
-- **Reviewer Mode:** opens the real diff in an interactive browser UI where you can comment, triage AI findings, and submit one pending GitHub review
+- **Author mode:** turns your branch diff into a reviewer-friendly PR description
+- **Reviewer mode:** opens the real diff in an interactive browser UI where you can comment, triage AI findings, and submit one pending GitHub review
 
 ```bash
 npx skills add hamedghaderi/pr-narrative
@@ -41,7 +41,7 @@ the PR itself.
 | How many you get | However many it feels like writing | Hard cap: 3 per file, 10 per review |
 | What it comments on | Anything, including style opinions | Four categories only: probable bugs, security, missing error handling, breaking-change risk |
 | Who decides what counts | Already written; you skim it | Every AI finding arrives unaccepted. Nothing reaches GitHub until you click Accept |
-| Who signs the review | Ambiguous | You do. It posts as pending and never sets Approve, Request changes, or Comment |
+| Who signs the review | Ambiguous | You do. The skill never sets Approve, Request changes, or Comment |
 
 The cap is the constraint that matters most. An unconstrained agent has no reason to
 stop at three findings in a file, so it writes eleven, and the two that mattered get
@@ -73,13 +73,12 @@ and hands you a Markdown fix-list instead.
 
 **Author mode.** It writes the description from the code rather than the ticket, then
 opens an interactive page where you Approve or Request-change each section. Your
-decisions go back through a small bundled local server (Python stdlib, no installs) and
-it revises until everything is approved. The result is a GitHub-flavored Markdown PR
-body that fills your repo's template and stands on its own.
+decisions go back through a small bundled local server and it revises until everything
+is approved. The result is a GitHub-flavored Markdown PR body that fills your repo's
+template and stands on its own.
 
 Both modes avoid mermaid diagrams, file-by-file changelogs and method-name dumps, and
-both stop short of the final action: reviewer mode never submits a verdict, author mode
-never opens the PR.
+Author mode never opens the PR for you.
 
 <details>
 <summary><strong>Example output</strong> (a generated PR body)</summary>
@@ -130,7 +129,7 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 |---|---|---|
 | `git` and a browser | Required | Required |
 | `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
-| `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, same |
+| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
 
 <details>
 <summary><strong>Manual install (clone and copy)</strong></summary>
@@ -157,12 +156,10 @@ The skill triggers on either intent, and confirms which one with a single questi
 before it starts rather than guessing.
 
 **To review:** "review this PR <url>", "review PR #42", "review my branch before I open
-a PR". It fetches the PR, or diffs your branch locally when there's no PR yet, builds
-the annotation page and opens it in your browser.
+a PR".
 
 **To write a description:** "write the PR for this branch", "make a PR description for
-these changes", "describe this change for review". It reads the diff against your base
-branch, generates the review page, and revises until you've approved every section.
+these changes", "describe this change for review".
 
 ## License
 

@@ -180,6 +180,8 @@ Two adjacent sections, two independent verdicts: "Description" is already green
 comment already filled in ("Mention the CDN concurrency limit here so reviewers know
 the retry budget."). Each section carries its own state until every one is approved.
 
+> **Useful? Star it so other developers can find it.**
+
 ## Why not just ask an agent to review the PR?
 
 You can, and it will find real things. The gap isn't analysis quality, it's what

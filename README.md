@@ -71,14 +71,16 @@ thumbnails one at a time and hit a CDN rate limit, and now pulls a whole categor
 single bundle.
 
 ![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
-The before panel shows one-request-per-image calls hitting a red `429` and stalling the
+
+*The before panel shows one-request-per-image calls hitting a red `429` and stalling the
 rest of the batch; the after panel shows the single `?bundle` request unpacking into
-file chips instead.
+file chips instead.*
 
 ![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
-Two adjacent sections, two independent verdicts: "Description" is green "Approved",
+
+*Two adjacent sections, two independent verdicts: "Description" is green "Approved",
 "Before → After" is amber "Changes requested". Each section carries its own state until
-every one is approved.
+every one is approved.*
 
 The Markdown body that ships alongside the page makes the same change concrete:
 

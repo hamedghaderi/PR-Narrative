@@ -6,8 +6,8 @@ Review pull requests as a story, not a wall of code.
 
 PR Narrative gives coding agents two workflows:
 
-- **Author mode:** turns your branch diff into a reviewer-friendly PR description
-- **Reviewer mode:** opens the real diff in an interactive browser UI where you can comment, triage AI findings, and submit one pending GitHub review
+- **Reviewer mode:** review a real diff in an interactive browser UI, accept or reject AI findings, and create one pending GitHub review
+- **Author mode:** turn your branch diff into a reviewer-friendly PR description
 
 ```bash
 npx skills add hamedghaderi/pr-narrative
@@ -120,11 +120,11 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 <details>
 <summary><strong>Requirements by mode</strong></summary>
 
-| Requirement | Author mode | Reviewer mode |
+| Requirement | Reviewer mode | Author mode |
 |---|---|---|
 | `git` and a browser | Required | Required |
-| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
-| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
+| `gh`, authenticated | Only to review a real PR; reviewing a local branch needs none | Never used. Reads your local git history only |
+| `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
 
 </details>
 

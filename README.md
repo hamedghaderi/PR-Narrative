@@ -1,6 +1,17 @@
-# pr-narrative
+# PR Narrative 
 
 [![Install with npx skills](https://img.shields.io/badge/npx%20skills%20add-hamedghaderi%2Fpr--narrative-black?logo=npm)](https://github.com/vercel-labs/skills)
+
+Review pull requests as a story, not a wall of code.
+
+PR Narrative gives coding agents two workflows:
+
+- **Author Mode:** turns your branch diff into a reviewer-friendly PR description
+- **Reviewer Mode:** opens the real diff in an interactive browser UI where you can comment, triage AI findings, and submit one pending GitHub review
+
+```bash
+npx skills add hamedghaderi/pr-narrative
+```
 
 An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
 the descriptions for the ones you open yourself.**

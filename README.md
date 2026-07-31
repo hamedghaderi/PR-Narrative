@@ -14,6 +14,8 @@ of a pull request:
 npx skills add hamedghaderi/pr-narrative
 ```
 
+### 22-second demo: a cold diff becomes an annotated review
+
 https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
 
 ## Why not just ask an agent to review the PR?

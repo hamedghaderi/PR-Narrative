@@ -4,7 +4,8 @@
 
 Review pull requests as a story, not a wall of code.
 
-PR Narrative gives coding agents two workflows:
+PR Narrative adds a human review layer between coding agents and GitHub, on both sides
+of a pull request:
 
 - **Reviewer mode:** review a real diff in an interactive browser UI, accept or reject AI findings, and create one pending GitHub review
 - **Author mode:** turn your branch diff into a reviewer-friendly PR description

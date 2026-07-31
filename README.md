@@ -25,6 +25,21 @@ https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
 [`cursor`](https://github.com/topics/cursor) ·
 [`agent-skills`](https://github.com/topics/agent-skills)
 
+## Works with
+
+Any coding agent that loads `SKILL.md` files. The
+[`skills` CLI](https://github.com/vercel-labs/skills) detects yours and installs to the
+right directory: **Claude Code**, **OpenCode**, **Cursor**, **Codex**, and
+[70+ more](https://github.com/vercel-labs/skills#supported-agents).
+
+What it asks of your machine stays deliberately thin:
+
+| Requirement | Author mode | Reviewer mode |
+|---|---|---|
+| `git` and a browser | Required | Required |
+| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
+| `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, same |
+
 An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
 the descriptions for the ones you open yourself.**
 

@@ -105,15 +105,7 @@ The HTML companion renders the same before/after as styled panels. Both files li
 ## Works with
 
 Any coding agent that loads `SKILL.md` files: **Claude Code**, **OpenCode**, **Cursor**,
-**Codex** and [70+ more](https://github.com/vercel-labs/skills#supported-agents). The
-[`skills` CLI](https://github.com/vercel-labs/skills) detects yours and installs to the
-right directory.
-
-| Requirement | Author mode | Reviewer mode |
-|---|---|---|
-| `git` and a browser | Required | Required |
-| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
-| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
+**Codex** and [70+ more](https://github.com/vercel-labs/skills#supported-agents).
 
 ## Installation
 
@@ -124,6 +116,17 @@ npx skills add hamedghaderi/pr-narrative
 The CLI clones the repo, finds the `pr-narrative` skill, detects your agent, and
 installs it to the right directory. For flags like `--list`, `-g` and `--copy`, see the
 [`skills` CLI docs](https://github.com/vercel-labs/skills).
+
+<details>
+<summary><strong>Requirements by mode</strong></summary>
+
+| Requirement | Author mode | Reviewer mode |
+|---|---|---|
+| `git` and a browser | Required | Required |
+| `gh`, authenticated | Never used. Reads your local git history only | Only to review a real PR; reviewing a local branch needs none |
+| `python3` | Optional in both modes. It runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
+
+</details>
 
 <details>
 <summary><strong>Manual install (clone and copy)</strong></summary>

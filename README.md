@@ -95,8 +95,14 @@ The full generated pair, the [Markdown body](./examples/pr-body-thumbnails.md) a
 
 ## Works with
 
-Any coding agent that loads `SKILL.md` files: **Claude Code**, **OpenCode**, **Cursor**,
-**Codex** and [70+ more](https://github.com/vercel-labs/skills#supported-agents).
+PR Narrative uses the open `SKILL.md` format and installs through the
+[`skills` CLI](https://github.com/vercel-labs/skills) for **Claude Code**, **OpenCode**,
+**Cursor**, **Codex** and
+[other supported agents](https://github.com/vercel-labs/skills#supported-agents).
+
+Running it needs an agent that can execute shell commands and open a browser. The live
+review server is optional, but using it also means the agent has to hold a background
+process open.
 
 ## Installation
 
@@ -113,6 +119,7 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 
 | Requirement | Reviewer mode | Author mode |
 |---|---|---|
+| An agent with shell access | Required. Backgrounding a process is needed only for the optional live server | Required, same |
 | `git` and a browser | Required | Required |
 | `gh`, authenticated | Only to review a real PR; reviewing a local branch needs none | Never used. Reads your local git history only |
 | `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, identical fallback |

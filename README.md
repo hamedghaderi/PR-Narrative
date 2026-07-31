@@ -13,6 +13,9 @@ PR Narrative gives coding agents two workflows:
 npx skills add hamedghaderi/pr-narrative
 ```
 
+https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
+
+
 An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
 the descriptions for the ones you open yourself.**
 

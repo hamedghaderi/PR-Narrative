@@ -15,6 +15,15 @@ npx skills add hamedghaderi/pr-narrative
 
 https://github.com/user-attachments/assets/2f2cb4b7-e87d-43bc-830b-5129ebfa8110
 
+[`ai-agent`](https://github.com/topics/ai-agent) ·
+[`code-review`](https://github.com/topics/code-review) ·
+[`pull-request`](https://github.com/topics/pull-request) ·
+[`developer-tools`](https://github.com/topics/developer-tools) ·
+[`claude-code`](https://github.com/topics/claude-code) ·
+[`opencode`](https://github.com/topics/opencode) ·
+[`codex`](https://github.com/topics/codex) ·
+[`cursor`](https://github.com/topics/cursor) ·
+[`agent-skills`](https://github.com/topics/agent-skills)
 
 An agent skill with two jobs: it **reviews pull requests with you**, and it **writes
 the descriptions for the ones you open yourself.**

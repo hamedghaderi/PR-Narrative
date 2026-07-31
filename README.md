@@ -93,8 +93,6 @@ The Markdown body that ships alongside the page makes the same change concrete:
 The full generated pair, the [Markdown body](./examples/pr-body-thumbnails.md) and its
 [HTML visual](./examples/pr-thumbnails.html), lives in [`examples/`](./examples).
 
-> **Useful? Star it so other developers can find it.**
-
 ## Works with
 
 Any coding agent that loads `SKILL.md` files: **Claude Code**, **OpenCode**, **Cursor**,
@@ -150,6 +148,9 @@ a PR".
 
 **To write a description:** "write the PR for this branch", "make a PR description for
 these changes", "describe this change for review".
+
+> ⭐ If this improves your review workflow, star the repository so other developers can
+> find it.
 
 ## License
 

@@ -28,9 +28,9 @@ the PR itself.
 | | Plain agent prompt | Reviewer mode |
 |---|---|---|
 | Where findings land | Terminal scrollback | A pending review on the PR, anchored to real diff lines |
-| How many you get | However many it feels like writing | Hard cap: 3 per file, 10 per review |
-| What it comments on | Anything, including style opinions | Four categories only: probable bugs, security, missing error handling, breaking-change risk |
-| Who decides what counts | Already written; you skim it | Every AI finding arrives unaccepted. Nothing reaches GitHub until you click Accept |
+| How many you get | Unbounded | Hard cap: 3 per file, 10 per review |
+| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk |
+| How findings are triaged | Manually interpreted and copied from chat or terminal output | Each finding is visibly accepted or rejected before submission |
 | Who signs the review | Ambiguous | You do. The skill never sets Approve, Request changes, or Comment |
 
 The cap is the constraint that matters most. An unconstrained agent has no reason to

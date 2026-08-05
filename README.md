@@ -124,6 +124,10 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 | `gh`, authenticated | Only to review a real PR; reviewing a local branch needs none | Never used. Reads your local git history only |
 | `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
 
+The `explain` and `summarize-changes` subcommands are lighter: they touch `gh` in a
+read-only way only when you hand them a PR URL, need no `gh` at all for a local branch,
+and never need `python3`, since neither one starts a server.
+
 </details>
 
 <details>
@@ -155,6 +159,20 @@ a PR".
 
 **To write a description:** "write the PR for this branch", "make a PR description for
 these changes", "describe this change for review".
+
+### Direct subcommands
+
+Three subcommands, `explain`, `review-security` and `summarize-changes`, go straight to
+the work: naming one skips the mode question.
+
+**`/pr-narrative explain <pr-url | #N | branch>`** explains the change as a story, in
+chat. No browser page.
+
+**`/pr-narrative review-security <pr-url | #N | branch>`** is reviewer mode with AI findings
+narrowed to security only, under the same caps: 3 per file, 10 per review.
+
+**`/pr-narrative summarize-changes [pr-url | #N | branch]`** gives a quick summary of
+what changed and why it matters.
 
 > ⭐ If this improves your review workflow, star the repository so other developers can
 > find it.

@@ -1,25 +1,20 @@
 ---
 name: pr-narrative
+argument-hint: "[explain|review-security|summarize-changes] [pr-url | #N | branch]"
 description: >
   Two-mode PR skill. **Author mode** writes pull-request descriptions that read
-  like a clear explainer instead of a code dump, then reviews them interactively in
-  the browser. Use it when the user asks to write, draft, generate, or improve a PR
-  description / PR body / PR write-up, or says things like "write the PR", "make a
-  PR description for this branch", "describe these changes for review". **Reviewer
-  mode** renders any PR's actual diff as an annotatable page: narrative context up
-  top, click-to-comment on lines below, optional AI-drafted risk callouts you
-  triage, and on Submit posts your accepted comments to GitHub as a PENDING review
-  the user finalizes themselves. Use it when the user says things like "review this
-  PR <url>", "review PR #N", "annotate this PR", or "review my branch/changes"
-  (local diff, no PR yet, produces a fix-list instead of posting anything). Always
-  confirm the mode with one quick question first (inferred mode recommended), unless
-  the user has explicitly named the mode in this conversation turn. Both modes produce a rich
-  before/after visual with a Background + Description narrative (styled panels,
-  GitHub `[!NOTE]`/`[!TIP]` callouts, comparison tables) and deliberately avoid
-  mermaid diagrams, file-by-file changelogs, and method-name dumps. Neither mode
-  ever runs `gh pr create`, opens a PR, or submits a review verdict; the user
-  always makes that call, on github.com. Do NOT use for code review scoring,
-  commit messages, or release notes.
+  like an explainer, not a code dump. Use it when the user asks to write, draft,
+  generate, or improve a PR description / PR body / PR write-up, or says "write the
+  PR", "make a PR description for this branch", "describe these changes for review".
+  **Reviewer mode** renders any PR's diff as an annotatable page: click-to-comment
+  on lines, optional AI-drafted risk callouts you triage, and posts accepted
+  comments as a PENDING GitHub review the user finalizes. Use it when the user says
+  "review this PR <url>", "review PR #N", "annotate this PR", or "review my
+  branch/changes". Confirm the mode with one question first unless the user already
+  named it. Also supports subcommands: "explain" (explains a diff in chat),
+  "review-security" (reviewer mode, security-only AI findings),
+  "summarize-changes" (quick chat summary); an explicit subcommand skips the mode
+  question. Do NOT use for code review scoring, commit messages, or release notes.
 ---
 
 # PR Narrative
@@ -44,6 +39,110 @@ still need the "why" and the "what changed" before you can comment usefully. Tha
 the real diff, lets you click lines to leave comments, and lands your feedback as a
 PENDING GitHub review instead of a description nobody asked for. One skill, two
 directions.
+
+## Subcommands (route before the mode question)
+
+Most invocations arrive as plain English, and those go through the mode question below.
+The skill also takes three named subcommands, and when one of them is present it decides
+everything: no question, no guessing, straight to work.
+
+**How the argument is read.** On harnesses that substitute `$ARGUMENTS` (Claude Code),
+the invocation text arrives here as one string. Split it on whitespace: the **first
+token** is the candidate subcommand, and everything after it is that subcommand's input
+(a PR URL, a `#N`, a branch name, or nothing at all). If `$ARGUMENTS` was **not
+substituted** by the harness, read the user's trailing invocation text and treat its
+first token as the candidate subcommand. The routing is identical either way.
+
+Where each first token goes:
+
+| First token | Route |
+|---|---|
+| `explain` | the **Explain subcommand** section below |
+| `review-security` | the **Review-security subcommand** section below |
+| `summarize-changes` | the **Summarize-changes subcommand** section below |
+| anything else | **not a subcommand.** A PR URL, a bare `#N`, a branch name, or free prose all fall through to `## Which mode?` below, with the full text kept as context for the inference rules. |
+| bare invocation (no trailing text) | `## Which mode?` below, unchanged. |
+
+Match the token as written: lowercase and hyphenated. A near miss like `security-review`
+or `Summarize` is free prose, so it falls through like anything else.
+
+**An explicit subcommand is the escape hatch.** The escape-hatch rule below (a user who
+names the mode in this same turn gets no question) covers this case too: naming
+`explain`, `review-security`, or `summarize-changes` **skips the mode question**
+entirely. Do not ask it. The user already answered it by picking a subcommand.
+
+### Explain subcommand
+
+`explain` is the terminal-only path: read the change, then explain it in the chat message
+itself. No browser UI, no server, no output files, ever. Nothing to open and nothing to
+download; the answer *is* the message.
+
+**Resolve the input first.** If the text after the `explain` token holds a PR URL or a
+bare `#N`, read the PR **read-only**: `gh pr view --json title,body,files,commits` and
+`gh pr diff`. Never a mutating `gh` call, in any form. Otherwise treat it as a local
+branch and diff it against the base exactly as author mode's step 1 does:
+`git diff --stat <base>...HEAD`, `git log --oneline <base>..HEAD`, then
+`git diff <base>...HEAD -- <key files>`, and read the **actual changed code**, not just
+the diff summary.
+
+If a PR reference was given but `gh` is missing or unauthenticated, say so plainly and
+offer the local-branch path instead. Do not guess at the contents of a PR you cannot
+read, and do not silently fall back to something the user never asked for.
+
+**What the message looks like.** Five beats, in this order, all in chat:
+
+1. **The hallway sentence.** The change in 20 seconds, in plain words.
+2. **Background as a scene.** What someone does today and what concretely goes wrong for
+   them, with concrete toy data ("a 30-day backfill fired 30 sequential requests").
+3. **The core idea**, one plain sentence, before any elaboration.
+4. **Before and after**, described conceptually: prose, or a small Markdown comparison
+   table. No HTML.
+5. **Trade-offs and edge cases** worth knowing.
+
+Follow the **Writing style** section below to the letter: story doctrine, every claim
+sourced from the code rather than the ticket, junior-readable, ideas not identifiers, and
+no em dashes anywhere.
+
+One contrast worth naming: for a full standalone teaching document with a code
+walkthrough and a quiz, that's the separate `explain-diff` skill, not this subcommand.
+`explain` is a conversation, not an artifact.
+
+### Review-security subcommand
+
+`review-security` **is** reviewer mode. Everything in the `## Reviewer mode` section
+below applies unchanged: the preflight in §1 (PR path only; local mode skips it, exactly
+as written there), the fetch-and-understand work in §2, the page build, serve and wait in
+§4, and the submit behavior in §5, each already covering both the PR path and the local
+path where applicable. Do not re-invent any of it here.
+
+Exactly one thing differs: the AI pre-seed policy. Instead of the four-category policy in
+§3, use the security-only variant defined in `references/reviewer-ui.md §2b`. In one
+sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a one-sentence
+reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
+arrives pre-accepted, and zero findings is still a correct outcome; only the categories
+narrow to security.
+
+Every reviewer-mode guardrail holds verbatim: a posted review is **PENDING** only, this
+skill never submits a verdict, and a local-path review posts nothing anywhere.
+
+### Summarize-changes subcommand
+
+`summarize-changes` is the quick answer: what changed, in chat, in a few lines. It is
+**not** a review loop, **not** a PR body, and **not** a file. Nothing is written to disk
+and nothing is served.
+
+Resolve the input exactly as the **Explain subcommand** does: a PR URL or `#N` goes
+through the same read-only `gh` reads, anything else is the local branch against its base,
+and a missing or unauthenticated `gh` gets the same plain-spoken fallback offer. The
+commands aren't repeated here on purpose; there is one set of input rules and it lives
+just above.
+
+**What the message looks like:** the hallway sentence, then a short bullet list of what
+changed **per concern**, not per file (one bullet for "retries now back off", not one
+bullet per touched file), then notable risks or trade-offs if there are any. A few lines
+total. If the change is trivial, a single paragraph is a correct and sufficient answer;
+padding it out is a defect. Same style rules as `explain`: plain words, concrete toy data,
+ideas not identifiers, no em dashes.
 
 ## Which mode? (decide this first)
 
@@ -556,6 +655,19 @@ These hold regardless of mode; read them before you touch `gh` or GitHub:
   fix-listed.
 - **MUST** make zero GitHub API calls in author mode; it never runs `gh` at all,
   it only reads the local git history and diff.
+- **MUST** keep reviewer mode and `review-security` to the `gh` usage already
+  specified in this document (the preflight, the fetch, and the pending-review post),
+  and **MUST NOT** submit a verdict or run `gh pr create` from either of them, ever.
+- **MUST** restrict `explain` and `summarize-changes` to read-only `gh`
+  (`gh pr view`, `gh pr diff`, `gh api .../pulls/.../files`), and only when the user
+  supplied a PR reference; **MUST NOT** make any write or otherwise mutating `gh`
+  call from them, ever. A local-branch invocation of either one uses `git` only and
+  never touches `gh`.
+- **MUST NOT** produce any file or start any server from the `explain` or
+  `summarize-changes` subcommands, ever; their entire output is the chat message.
+- **MUST NOT** widen the AI pre-seed policy via `review-security`, ever; the
+  security variant narrows the categories and keeps the caps (see
+  `references/reviewer-ui.md §2b`).
 - **MUST NOT** let reviewer mode produce a Markdown PR body; that artifact belongs
   to author mode only; reviewer mode's outputs are the annotation page, a pending
   review, or a fix-list, never a PR description.
@@ -581,4 +693,7 @@ That same principle extends to reviewer mode:
   text impersonate an AI-authored suggestion.
 - The review server remains loopback-only (`127.0.0.1`) in both modes, the same
   trust boundary noted in author mode's step 3, unchanged here.
+- The subcommands add no new trust boundaries: `explain` and `summarize-changes` are
+  read-only and have no UI at all, so there is no free-text channel to mistrust, and
+  `review-security` inherits reviewer mode's boundaries exactly as described above.
 </content>

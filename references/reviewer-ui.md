@@ -143,6 +143,46 @@ shape (`references/annotation-schema.md` §1) before running the substitution st
 above, each one `{id, scope, type, filePath, lineStart, lineEnd, side, body,
 suggestedCode?, origin: "ai", accepted: false, severity, reasoning}`.
 
+A security-only variant of this policy, used by the review-security subcommand, is
+defined in §2b below.
+
+## 2b. Security-only pre-seed variant (review-security)
+
+This variant applies **only** when the skill was invoked through the `review-security`
+subcommand. In every other invocation, §2 above is the policy and this section does not
+apply.
+
+Everything in §2 carries over **unchanged** except the category list:
+
+- **Same scope rule**: only lines that were actually **changed in this diff** (added,
+  removed, or their immediate context). Never comment on unrelated pre-existing code
+  just because it's visible in a hunk.
+- **Same hard caps**: **≤3 per file, ≤10 per review**, counted against the whole
+  `aiAnnotations` array before injection. Trim by severity, silently, to stay under both.
+- **Same required fields**: every annotation carries `severity` and a one-sentence
+  `reasoning`. `severity` stays one of `"important" | "nit" | "pre_existing"`; a
+  security focus does not earn a new severity tier.
+- **Same injection contract**: always `origin: "ai"`, `accepted: false`, so drafts are
+  excluded from submission until the user explicitly accepts them in the UI.
+- **Same zero-findings rule**: when nothing qualifies, seed ZERO. An empty
+  `aiAnnotations` array is a correct outcome, not a failure, and not a reason to
+  manufacture a comment.
+
+**Categories: exactly these five, nothing else**:
+
+1. Injection risks (SQL/command/template/path traversal) on changed input-handling
+   lines.
+2. Authentication/authorization flaws (missing checks, privilege escalation, insecure
+   session handling).
+3. Secrets exposure (hardcoded credentials, tokens, keys, or any secret written to
+   logs).
+4. Unsafe deserialization or unvalidated input reaching a sensitive sink.
+5. Dependency/supply-chain risk introduced by changed dependency or lockfile lines.
+
+This variant is **locked**, same as §2: do not widen the categories, do not raise the
+caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,
+missing error handling, and breaking-change risks belong to §2's list, not this one.
+
 ## 3. Serve + wait
 
 Same single-Bash-call launch/poll pattern as author mode (see SKILL.md §4 "Build the

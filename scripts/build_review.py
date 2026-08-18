@@ -27,6 +27,8 @@ import diff_anchor
 MAX_BODY = 65535
 TRUNCATE_SUFFIX = "\n[truncated]"
 SUGGESTION_FENCE = "```suggestion"
+# Must stay byte-identical to DISPROOF_LABEL in assets/review-template.html.
+DISPROOF_LABEL = "**Smallest check that would prove this wrong:**"
 
 
 def _truncate(body):
@@ -49,8 +51,18 @@ def _first_valid_anchor(files, path):
     return None
 
 
+def _disproof_note(ann):
+    if ann.get("origin") != "ai":
+        return ""
+    text = (ann.get("disproof") or "").strip()
+    return DISPROOF_LABEL + " " + text if text else ""
+
+
 def _build_comment_body(ann, downgraded=False):
     body = ann.get("body") or ""
+    note = _disproof_note(ann)
+    if note:
+        body = (body + "\n\n" + note).strip()
     if ann.get("type") == "suggestion" and ann.get("suggestedCode") is not None:
         code = ann["suggestedCode"]
         if downgraded:
@@ -103,6 +115,9 @@ def _map_file_comment(ann, files, warnings):
         return None
     line, side = anchor
     body = "**File-level comment:**\n\n" + (ann.get("body") or "")
+    note = _disproof_note(ann)
+    if note:
+        body = (body + "\n\n" + note).strip()
     return {"path": path, "line": line, "side": side, "body": _truncate(body)}
 
 

@@ -41,11 +41,13 @@ the `gh api` side of that mapping).
 | `accepted`     | `boolean`                                      | yes                     | **Default rule (state this explicitly, it is load-bearing): AI annotations (`origin: "ai"`) default to `accepted: false`. User annotations (`origin: "user"`) default to `accepted: true`.** Only annotations with `accepted: true` at submit time are included in a GitHub pending review; see the payload builder contract in `references/annotation-schema.md#4-fix-list-artifact-local-mode` and the filtering rule in `scripts/build_review.py`. |
 | `severity`     | `"important" \| "nit" \| "pre_existing"`       | optional, AI only       | Never set by user annotations. No other severity values exist; do not invent new ones (e.g. no `"blocker"`, no `"minor"`). |
 | `reasoning`    | `string`                                       | optional, AI only       | One sentence explaining why the AI flagged this line. Never set by user annotations. |
+| `disproof`     | `string`                                       | required when `severity === "important"`, AI only | The smallest concrete check that would prove the concern **false**: a test to write, a command to run, or an output to inspect, in that order of preference. Not a restatement of `reasoning` and not further argument for the concern; it is what would make the comment go away. Omitted for `"nit"` and `"pre_existing"`, and never set by user annotations. Unlike `severity` and `reasoning`, this field **is** carried into the posted GitHub comment body by `scripts/build_review.py`. |
 
 ### Worked example: annotation array
 
 Three annotations: one user line comment, one AI suggestion (untriaged, so
-`accepted: false`), and one AI concern with severity/reasoning.
+`accepted: false`), and one AI concern with severity/reasoning. Note that the
+`important` one carries `disproof` and the `nit` one does not.
 
 ```json
 [
@@ -74,7 +76,8 @@ Three annotations: one user line comment, one AI suggestion (untriaged, so
     "origin": "ai",
     "accepted": false,
     "severity": "important",
-    "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior."
+    "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
+    "disproof": "Call formatDate('not-a-date') from an existing caller and assert it returns '' rather than throwing. If it already threw before this change, the concern is wrong."
   },
   {
     "id": "a-3",
@@ -252,7 +255,8 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
       "origin": "ai",
       "accepted": false,
       "severity": "important",
-      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior."
+      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
+      "disproof": "Call formatDate('not-a-date') from an existing caller and assert it returns '' rather than throwing. If it already threw before this change, the concern is wrong."
     }
   ]
 }
@@ -329,7 +333,8 @@ to understand the annotation contents, only route on `kind`.
       "origin": "ai",
       "accepted": true,
       "severity": "important",
-      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior."
+      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
+      "disproof": "Call formatDate('not-a-date') from an existing caller and assert it returns '' rather than throwing. If it already threw before this change, the concern is wrong."
     },
     {
       "id": "a-3",
@@ -446,6 +451,7 @@ A quick reference for implementers wiring these contracts together:
 | Anchor side                  | `side`: `"RIGHT"` (new/context) \| `"LEFT"` (deleted)                  |
 | AI vs. user                  | `origin`: `"ai"` \| `"user"`                                          |
 | Triage state                 | `accepted`: boolean; **AI default `false`, user default `true`**      |
+| Falsification step           | `disproof`: string, AI only, required when `severity === "important"`; the only AI-metadata field that survives into the posted GitHub comment |
 | Payload discriminator        | `kind: "review-annotations"` (reviewer mode) vs. no `kind` field at all (author mode, `references/review-ui.md`) |
 | File render cap              | 30 files fully rendered in `files[]`; the rest go to `overflowFiles[]` |
 | Local fix-list filename token | literal substring `review-fixlist` in `/tmp/YYYY-MM-DD-review-fixlist-<branch>.md` |

@@ -524,7 +524,10 @@ serving the page. The full definition lives in `references/reviewer-ui.md` §2 a
 **locked**: don't widen it. In summary: only lines actually changed in this diff;
 only four categories (probable bugs/logic errors, security issues, missing error
 handling on new paths, breaking-change risk to callers); hard caps of **≤3 per file,
-≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`;
+≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`,
+and every `severity: "important"` draft also carries `disproof`, the smallest check
+that would prove the concern **false** (if you can't name one, it isn't important:
+demote it or drop it, and never invent a test for something untestable);
 when nothing qualifies, seed zero; an empty set is a correct outcome, not a failure.
 Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excluded from
 submission by default**, and only included if the user explicitly accepts it in the
@@ -627,6 +630,9 @@ done
 - AI drafts, if seeded, stayed inside the caps (≤3/file, ≤10/review), each carries
   a severity and a reason, and every one is visually distinct from user comments in
   the page; never indistinguishable, never silently pre-accepted.
+- Every `important` AI draft carries a `disproof` that is a real check the author
+  could run, not a restatement of the concern. Any finding you couldn't falsify was
+  demoted or dropped rather than shipped with an invented test.
 - For PR mode, the response after posting actually contains `"state": "PENDING"`;
   if it doesn't, stop and work through the error table in
   `references/github-posting.md` before telling the user it's done.

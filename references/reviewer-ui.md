@@ -129,6 +129,16 @@ the caps, and don't invent a fifth reason to comment.
 - **Every AI annotation carries `severity` and one-sentence `reasoning`**: no
   unexplained flags. `severity` is one of `"important" | "nit" | "pre_existing"`
   (`references/annotation-schema.md` §1); never a value outside that set.
+- **Every `severity: "important"` annotation also carries `disproof`**: the smallest
+  concrete check that would prove the concern **false**. Write the check that would
+  make you withdraw the comment, not one more argument for why you're right. Prefer a
+  test the author can actually run ("assert `formatDate(null)` still returns `''`");
+  fall back to a command to run or an output to look at only when the concern isn't
+  testable. If you can't name a check that would settle it, you don't understand the
+  risk well enough to call it important: drop it to `"nit"` or drop it entirely.
+  **Never invent a plausible-looking test for a concern that can't be tested**: a
+  fabricated check is worse than the sentence it replaced, because it reads as
+  evidence. `nit` and `pre_existing` annotations omit `disproof`.
 - **When nothing qualifies, seed ZERO.** An empty `aiAnnotations` array is a correct,
   expected outcome; silence is fine. Do not manufacture a comment just to have
   something to show.
@@ -141,7 +151,8 @@ the caps, and don't invent a fifth reason to comment.
 Populate `diff_json["aiAnnotations"]` with objects following the annotation object
 shape (`references/annotation-schema.md` §1) before running the substitution step
 above, each one `{id, scope, type, filePath, lineStart, lineEnd, side, body,
-suggestedCode?, origin: "ai", accepted: false, severity, reasoning}`.
+suggestedCode?, origin: "ai", accepted: false, severity, reasoning, disproof?}`
+(`disproof` present exactly when `severity` is `"important"`).
 
 A security-only variant of this policy, used by the review-security subcommand, is
 defined in §2b below.
@@ -160,8 +171,9 @@ Everything in §2 carries over **unchanged** except the category list:
 - **Same hard caps**: **≤3 per file, ≤10 per review**, counted against the whole
   `aiAnnotations` array before injection. Trim by severity, silently, to stay under both.
 - **Same required fields**: every annotation carries `severity` and a one-sentence
-  `reasoning`. `severity` stays one of `"important" | "nit" | "pre_existing"`; a
-  security focus does not earn a new severity tier.
+  `reasoning`, and every `severity: "important"` one also carries `disproof`.
+  `severity` stays one of `"important" | "nit" | "pre_existing"`; a security focus
+  does not earn a new severity tier.
 - **Same injection contract**: always `origin: "ai"`, `accepted: false`, so drafts are
   excluded from submission until the user explicitly accepts them in the UI.
 - **Same zero-findings rule**: when nothing qualifies, seed ZERO. An empty
@@ -178,6 +190,13 @@ Everything in §2 carries over **unchanged** except the category list:
    logs).
 4. Unsafe deserialization or unvalidated input reaching a sensitive sink.
 5. Dependency/supply-chain risk introduced by changed dependency or lockfile lines.
+
+Category 5 is the one that most often has no honest `disproof`: "this new dependency
+might be malicious" is not something a test can refute. When that happens, do not
+manufacture a check to satisfy the field. Either name a real verifiable step (the
+advisory ID to look up, the `npm audit`/`pip-audit` invocation, the published
+checksum to compare) or set `severity` to `"nit"` and leave `disproof` off. The rule
+in §2 holds here: an unfalsifiable concern is not an `"important"` finding.
 
 This variant is **locked**, same as §2: do not widen the categories, do not raise the
 caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,

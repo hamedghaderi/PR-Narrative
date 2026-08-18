@@ -639,6 +639,11 @@
       r.appendChild(el("em", null, "Why flagged: " + a.reasoning));
       n.appendChild(r);
     }
+    if (a.origin === "ai" && a.disproof) {
+      var dp = el("div", "anno-meta");
+      dp.appendChild(el("em", null, "Prove this wrong: " + a.disproof));
+      n.appendChild(dp);
+    }
 
     var actions = el("div", "anno-actions");
     if (a.origin === "ai") {
@@ -765,9 +770,15 @@
     if (a.origin === "ai") {
       if (a.severity != null) out.severity = a.severity;
       if (a.reasoning != null) out.reasoning = a.reasoning;
+      if (a.disproof != null) out.disproof = a.disproof;
     }
     return out;
   }
+
+  // Label for the AI falsification step (annotation-schema.md §1, `disproof`) in
+  // rendered Markdown. Kept identical to DISPROOF_LABEL in scripts/build_review.py
+  // so the local fix-list and a posted GitHub comment read the same way.
+  var DISPROOF_LABEL = "**Smallest check that would prove this wrong:**";
 
   // Local-mode fix-list: the Markdown the agent would render from a submitted
   // payload, built client-side so the user can paste it somewhere directly
@@ -820,6 +831,10 @@
           lines.push("");
           lines.push(a.body || "");
           lines.push("");
+          if (a.origin === "ai" && a.disproof) {
+            lines.push(DISPROOF_LABEL + " " + a.disproof);
+            lines.push("");
+          }
           if (isSuggestion && a.suggestedCode != null) {
             lines.push("```suggestion");
             lines.push(a.suggestedCode);
@@ -831,6 +846,10 @@
           lines.push("");
           lines.push(a.body || "");
           lines.push("");
+          if (a.origin === "ai" && a.disproof) {
+            lines.push(DISPROOF_LABEL + " " + a.disproof);
+            lines.push("");
+          }
         }
       });
     });

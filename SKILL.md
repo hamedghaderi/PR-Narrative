@@ -570,6 +570,17 @@ Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excl
 submission by default**, and only included if the user explicitly accepts it in the
 UI.
 
+Finding the problem is only half of it. **How each finding is worded is governed by
+`references/reviewer-ui.md` §2c**, which applies to the security variant too: write for
+someone who has never opened this part of the codebase, open with the problem in plain
+English, then say what goes wrong, then give an example if it helps, then suggest a
+change or ask a clear question. Class and method names are supporting evidence, so they
+come after the plain sentence rather than in place of it. Length tracks severity: an
+`important` finding gets short paragraphs, a `nit` gets one or two sentences. Say in
+words which kind of concern it is (a correctness bug, a possible inconsistency, a
+performance issue, a maintainability concern, a cosmetic improvement) without inflating
+it, and leave `severity` itself at the three values the schema allows.
+
 ### 4. Build the page, serve it, and wait
 
 Build the annotation page from `assets/review-template.html` following
@@ -670,6 +681,15 @@ done
 - Every `important` AI draft carries a `disproof` that is a real check the author
   could run, not a restatement of the concern. Any finding you couldn't falsify was
   demoted or dropped rather than shipped with an invented test.
+- Every AI draft body clears the §2c bar: its first sentence makes sense without
+  opening another file, the problem is stated before the technical proof, it describes
+  behavior that can really happen rather than restating the code, and any relationship
+  between two files or classes is explained rather than assumed. Read each one as
+  someone seeing this code for the first time; if you have to reconstruct the argument
+  to follow it, rewrite it before serving the page.
+- No draft is longer than its severity earns, and none is dressed up as more serious
+  than it is. A `nit` that runs four paragraphs is as much a defect as an `important`
+  finding compressed into an unexplained phrase.
 - For PR mode, the response after posting actually contains `"state": "PENDING"`;
   if it doesn't, stop and work through the error table in
   `references/github-posting.md` before telling the user it's done.

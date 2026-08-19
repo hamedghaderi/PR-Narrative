@@ -35,7 +35,7 @@ the `gh api` side of that mapping).
 | `lineStart`    | `integer` \| `null`                            | required if `scope === "line"` | First line of the range. `null` for `scope: "file"` or `scope: "general"`.                                          |
 | `lineEnd`      | `integer` \| `null`                            | required if `scope === "line"` | Last line of the range (equal to `lineStart` for a single-line comment).                                            |
 | `side`         | `"RIGHT" \| "LEFT"` \| `null`                  | required if `scope === "line"` | `RIGHT` = the new file (added or unchanged/context lines). `LEFT` = the old file (deleted lines). `lineStart`/`lineEnd` are new-file line numbers when `side` is `RIGHT`, old-file line numbers when `side` is `LEFT`. `null` for `scope: "file"` or `scope: "general"`. |
-| `body`         | `string` (markdown)                            | yes                     | The comment text. For `type: "suggestion"`, this is the human-readable explanation; the code itself goes in `suggestedCode`, not inline in `body`. |
+| `body`         | `string` (markdown)                            | yes                     | The comment text. For `type: "suggestion"`, this is the human-readable explanation; the code itself goes in `suggestedCode`, not inline in `body`. **For AI annotations, the wording is governed by `references/reviewer-ui.md` §2c**: open with the problem in plain English, then the consequence, then an example if it helps, then a suggestion or question, with identifiers used as supporting evidence rather than as the opening. Length scales with severity: an `important` finding earns short paragraphs, a `nit` stays to one or two sentences. |
 | `suggestedCode`| `string`                                       | only for `type: "suggestion"` | Raw replacement code, **no** ```` ```suggestion ```` fence around it. The payload builder (`scripts/build_review.py`) wraps it in the fence when it builds the GitHub comment body; the annotation object itself stores unwrapped code. |
 | `origin`       | `"user" \| "ai"`                               | yes                     | Who authored the annotation.                                                                                       |
 | `accepted`     | `boolean`                                      | yes                     | **Default rule (state this explicitly, it is load-bearing): AI annotations (`origin: "ai"`) default to `accepted: false`. User annotations (`origin: "user"`) default to `accepted: true`.** Only annotations with `accepted: true` at submit time are included in a GitHub pending review; see the payload builder contract in `references/annotation-schema.md#4-fix-list-artifact-local-mode` and the filtering rule in `scripts/build_review.py`. |
@@ -71,7 +71,7 @@ Three annotations: one user line comment, one AI suggestion (untriaged, so
     "lineStart": 13,
     "lineEnd": 15,
     "side": "RIGHT",
-    "body": "Throwing here changes the function's contract for existing callers that pass bad input and expect an empty string back. Consider returning `''` instead, matching the existing `!d` branch above.",
+    "body": "This line now throws when the date can't be parsed. Before this change the same input quietly returned an empty string, so this is a correctness risk for code that already calls `formatDate`.\n\nAny caller that passes bad input and expects `''` back will now get an exception instead, and most of them won't be wrapped in a try/catch, because until now there was nothing to catch.\n\nFor example, a page rendering a record with a missing date used to show a blank cell. Now it fails while rendering that cell.\n\nCould we return `''` here instead, matching the existing `!d` branch a few lines above?",
     "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
     "origin": "ai",
     "accepted": false,
@@ -87,7 +87,7 @@ Three annotations: one user line comment, one AI suggestion (untriaged, so
     "lineStart": null,
     "lineEnd": null,
     "side": null,
-    "body": "No test covers the invalid-date branch added in formatDate.js.",
+    "body": "The new invalid-date branch in formatDate.js isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
     "origin": "ai",
     "accepted": false,
     "severity": "nit",
@@ -250,7 +250,7 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
       "lineStart": 13,
       "lineEnd": 15,
       "side": "RIGHT",
-      "body": "Throwing here changes the function's contract for existing callers that pass bad input and expect an empty string back. Consider returning '' instead, matching the existing !d branch above.",
+      "body": "This line now throws when the date can't be parsed. Before this change the same input quietly returned an empty string, so this is a correctness risk for code that already calls formatDate.\n\nAny caller that passes bad input and expects '' back will now get an exception instead, and most of them won't be wrapped in a try/catch, because until now there was nothing to catch.\n\nFor example, a page rendering a record with a missing date used to show a blank cell. Now it fails while rendering that cell.\n\nCould we return '' here instead, matching the existing !d branch a few lines above?",
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": false,
@@ -328,7 +328,7 @@ to understand the annotation contents, only route on `kind`.
       "lineStart": 13,
       "lineEnd": 15,
       "side": "RIGHT",
-      "body": "Throwing here changes the function's contract for existing callers that pass bad input and expect an empty string back. Consider returning '' instead, matching the existing !d branch above.",
+      "body": "This line now throws when the date can't be parsed. Before this change the same input quietly returned an empty string, so this is a correctness risk for code that already calls formatDate.\n\nAny caller that passes bad input and expects '' back will now get an exception instead, and most of them won't be wrapped in a try/catch, because until now there was nothing to catch.\n\nFor example, a page rendering a record with a missing date used to show a blank cell. Now it fails while rendering that cell.\n\nCould we return '' here instead, matching the existing !d branch a few lines above?",
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": true,
@@ -344,7 +344,7 @@ to understand the annotation contents, only route on `kind`.
       "lineStart": null,
       "lineEnd": null,
       "side": null,
-      "body": "No test covers the invalid-date branch added in formatDate.js.",
+    "body": "The new invalid-date branch in `formatDate.js` isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
       "origin": "ai",
       "accepted": false,
       "severity": "nit",
@@ -392,6 +392,15 @@ annotations with `accepted: true` are included, the same filter used before post
 GitHub, so the fix-list and a would-be pending review always agree on which findings
 made the cut.
 
+Bodies are reproduced as written; the fix-list renderer never rewrites or shortens
+them. That means AI findings arrive here in exactly the shape
+`references/reviewer-ui.md` §2c required when they were drafted: the plain-English
+problem first, then the consequence, then an example where one helps, then the
+suggestion or question. The audience is the same in both modes, so the standard is too.
+A local review is often read by the author alone, with no second reviewer to ask "what
+does this mean?", which makes a comment that cannot be understood on its own worth even
+less here than on a PR.
+
 ### Worked example: fix-list markdown
 
 ```markdown
@@ -407,9 +416,18 @@ Do we need to support Date instances directly here, or is d always a string/numb
 
 ### Lines 13-15 (RIGHT): suggestion
 
-Throwing here changes the function's contract for existing callers that pass bad
-input and expect an empty string back. Consider returning '' instead, matching the
-existing !d branch above.
+This line now throws when the date can't be parsed. Before this change the same input
+quietly returned an empty string, so this is a correctness risk for code that already
+calls formatDate.
+
+Any caller that passes bad input and expects '' back will now get an exception
+instead, and most of them won't be wrapped in a try/catch, because until now there was
+nothing to catch.
+
+For example, a page rendering a record with a missing date used to show a blank cell.
+Now it fails while rendering that cell.
+
+Could we return '' here instead, matching the existing !d branch a few lines above?
 
 ​```suggestion
   if (Number.isNaN(date.getTime())) {

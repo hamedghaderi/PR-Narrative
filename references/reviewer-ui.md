@@ -144,9 +144,13 @@ the caps, and don't invent a fifth reason to comment.
   something to show.
 - **Always `origin: "ai"`, `accepted: false`.** AI drafts are default-excluded from
   submission until the user explicitly accepts them in the UI; never inject an AI
-  annotation with `accepted: true`. This mirrors the load-bearing rule in
+  annotation with `accepted: true`. This mirrors the default stated in
   `references/annotation-schema.md` §1: "AI annotations (`origin: "ai"`) default to
   `accepted: false`."
+- **Every `body` follows §2c.** Deciding a line qualifies is only half the work. How the
+  comment is worded is governed by §2c below: lead with the problem in plain English,
+  then the consequence, then an example if it helps, then a suggestion or question. A
+  correct finding a reviewer cannot follow has not landed.
 
 Populate `diff_json["aiAnnotations"]` with objects following the annotation object
 shape (`references/annotation-schema.md` §1) before running the substitution step
@@ -155,7 +159,7 @@ suggestedCode?, origin: "ai", accepted: false, severity, reasoning, disproof?}`
 (`disproof` present exactly when `severity` is `"important"`).
 
 A security-only variant of this policy, used by the review-security subcommand, is
-defined in §2b below.
+defined in §2b below. The body-writing rules in §2c apply to both.
 
 ## 2b. Security-only pre-seed variant (review-security)
 
@@ -179,6 +183,10 @@ Everything in §2 carries over **unchanged** except the category list:
 - **Same zero-findings rule**: when nothing qualifies, seed ZERO. An empty
   `aiAnnotations` array is a correct outcome, not a failure, and not a reason to
   manufacture a comment.
+- **Same body-writing rules**: §2c governs the wording of every draft here too. A
+  security finding is not exempt from being explained plainly; if anything the reader is
+  less likely to already know the attack it describes, so name the concrete risk before
+  naming the mechanism.
 
 **Categories: exactly these five, nothing else**:
 
@@ -201,6 +209,163 @@ in §2 holds here: an unfalsifiable concern is not an `"important"` finding.
 This variant is **locked**, same as §2: do not widen the categories, do not raise the
 caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,
 missing error handling, and breaking-change risks belong to §2's list, not this one.
+
+## 2c. Writing the finding body (applies to §2 and §2b)
+
+§2 and §2b decide **whether** a line deserves a comment. This section decides **how the
+comment reads**, and it applies to every AI draft either policy produces.
+
+**Which field this governs.** This is about `body`, the text a reviewer actually reads
+on the page and the only prose that reaches GitHub (`scripts/build_review.py` carries
+`body` and `disproof` into the posted comment and nothing else). `reasoning` stays one
+sentence: it renders as the in-page "Why flagged" line and never leaves the browser.
+
+**Who you are writing for.** Assume a junior developer, a QA engineer, or someone who
+has never opened this part of the codebase. The test is blunt: they should understand
+the concern after reading it **once**, without opening another file first. Finding a
+real problem is only half the job; a correct comment nobody can act on has not landed.
+
+### Order: problem, then consequence, then example, then suggestion
+
+1. **Open with the problem in plain English.** The first sentence must stand on its own
+   without the reader opening another file. No identifier is allowed to carry the
+   meaning of that sentence.
+2. **Say why it matters.** What actually goes wrong, in terms of behavior a person
+   could observe.
+3. **Give one concrete example or scenario**, when it makes the concern easier to
+   believe. Skip it when the problem is already obvious.
+4. **Close with a suggested change or a clear question.** Leave the reader something to
+   do or something to answer.
+
+Class names, method names, queries and line references are **supporting evidence**.
+They belong after the plain sentence, never in front of it.
+
+Never use the reverse order: implementation detail, then code history, then edge cases,
+then the conclusion. If the point of the comment only becomes clear in the last
+sentence, rewrite it.
+
+### Length scales with severity and complexity
+
+Keep every comment as short as it can be without losing the reasoning needed to
+understand the concern. Padding a simple point into four beats is a defect; so is
+compressing a subtle one until the reason disappears.
+
+| Finding | Shape |
+|---|---|
+| `important`, and the reasoning is not obvious | All four beats, in short paragraphs. |
+| `important`, but the problem is self-evident once stated | Problem, consequence, suggestion. Drop the example. |
+| `nit` or `pre_existing` | One or two plain sentences. Never four beats. |
+
+### Describe behavior, not mechanics
+
+Explain what can actually happen at runtime, not what the code technically says.
+
+When two code paths disagree, state it outright rather than leaving the reader to infer
+it: **"These two paths can return different results for the same input."** Then explain
+why in one sentence.
+
+Specific cases that are routinely written too densely:
+
+- **Performance.** Name the unnecessary work that happens and roughly why it costs
+  something. "This runs one query per row, so a 500-row page issues 500 queries" beats
+  "N+1 risk".
+- **A magic number or a hidden dependency.** Say what other behavior the value depends
+  on, and what would break if that behavior changed later.
+- **A fallback that hides a mistake.** Say what the caller was expected to do, what
+  happens if they forget, and why that is dangerous.
+- **A cross-file relationship.** Spell out how the two pieces relate. Do not assume the
+  reader already knows that one method calls the other, or that two classes share a
+  base.
+
+### Name the kind of concern in words, not in `severity`
+
+Be explicit about what sort of problem this is, and do not let a comment sound more
+serious than it is:
+
+- a correctness bug
+- a possible inconsistency
+- a performance issue
+- a maintainability concern
+- a cosmetic improvement
+
+Say it in the prose. **Do not encode it in `severity`**, which stays exactly
+`"important" | "nit" | "pre_existing"` per `references/annotation-schema.md` §1 and
+gains no new values for this. The five kinds above and the three severity levels are
+different axes: a performance issue can be `important`, and a correctness bug in dead
+code can be a `nit`.
+
+### Unpack compressed phrases
+
+The problem is not technical vocabulary, it is **unexplained** vocabulary. A precise
+term is welcome once the reader has been given the plain version; a term used *instead
+of* the plain version is not.
+
+Phrases like these must not carry the weight of a sentence on their own: "load-bearing",
+"data drift", "escape hatch", "silent contract", "invariant", "forward path", "narrows
+the batch", "hydrates rows". Each one compresses a real idea into a phrase the reader
+has to decompress before they can even start evaluating the concern.
+
+Two ways to fix one:
+
+- Replace it with what it actually means here. "load-bearing" becomes "this value is
+  depended on by X, and if X changes this breaks".
+- Or keep the term and define it inline, in half a sentence, right where it appears.
+
+This rule governs **generated review comments**. The skill's own internal notes about
+build steps and escaping stay as precise as they need to be.
+
+### Evidence discipline
+
+- Include only the evidence needed to understand and trust the finding. You will
+  usually have found more than that; leave the rest out.
+- No implementation history. How the code got this way is almost never the reader's
+  problem.
+- No long chains of reasoning inside one paragraph. Short paragraphs, simple sentences.
+- Avoid speculative edge cases unless they are realistically reachable from the code as
+  it stands now.
+- No em dashes, matching the Writing style rules in `SKILL.md`.
+
+### Check every body before you inject it
+
+- Can someone understand this after reading it once?
+- Is the actual problem stated before the technical proof?
+- Does it explain behavior that can really happen, rather than restating the code?
+- Are cross-file and cross-class relationships explained rather than assumed?
+- Is the implementation history gone?
+- Would simpler words carry the same information without losing it?
+- Does the stated seriousness match the real seriousness?
+
+If a finding cannot be explained simply, your own understanding of it is the thing that
+needs simplifying, not the wording. If it still will not come out clearly, it is not
+ready: demote it to `nit` or drop it. This sits alongside the `disproof` rule in §2,
+which already says an unfalsifiable concern is not an `important` finding.
+
+### A rewrite, before and after
+
+Too dense:
+
+> The batch narrows forward product counts to the source's own delivery type while the
+> single-source evaluator counts all types, so the two can return different
+> actualCounts for the same source.
+
+Clear:
+
+> Here we only count rows matching the price source's current `delivery_type_id`, but
+> `EvaluateForwardCheck` does not apply that filter. This means the batch check and the
+> single-source check can return different counts for the same price source. For
+> example, this can happen if the delivery type changes while older rows still exist.
+> Could we make both paths use the same filtering rule?
+
+Too dense:
+
+> `subDays(3)` is load-bearing but unexplained.
+
+Clear:
+
+> `subDays(3)` depends on how far `lastCompletedDeliveryDay()` can look back. Three days
+> is enough with the current logic, but if that lookback changes later this query may
+> stop loading enough data. Could we add a comment explaining that dependency, or derive
+> the value from the same source?
 
 ## 3. Serve + wait
 
@@ -417,7 +582,7 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
       "lineStart": 13,
       "lineEnd": 15,
       "side": "RIGHT",
-      "body": "Throwing here changes the function's contract for existing callers that pass bad input and expect an empty string back. Consider returning '' instead, matching the existing !d branch above.",
+      "body": "This line now throws when the date can't be parsed. Before this change the same input quietly returned an empty string, so this is a correctness risk for code that already calls formatDate.\n\nAny caller that passes bad input and expects '' back will now get an exception instead, and most of them won't be wrapped in a try/catch, because until now there was nothing to catch.\n\nFor example, a page rendering a record with a missing date used to show a blank cell. Now it fails while rendering that cell.\n\nCould we return '' here instead, matching the existing !d branch a few lines above?",
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": true,
@@ -432,7 +597,7 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
       "lineStart": null,
       "lineEnd": null,
       "side": null,
-      "body": "No test covers the invalid-date branch added in formatDate.js.",
+      "body": "The new invalid-date branch in formatDate.js isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
       "origin": "ai",
       "accepted": false,
       "severity": "nit",

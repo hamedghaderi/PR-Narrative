@@ -118,7 +118,7 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 | `prUrl`         | `string` \| `null`       | Full `https://github.com/...` URL. `null` in local mode.                                  |
 | `branch`        | `string`                 | Branch name: used in the fix-list filename and the local-mode localStorage key.           |
 | `headRefOid`    | `string` \| `null`       | The commit SHA the diff was generated against. `null` in local mode (no commit_id needed). |
-| `narrativeHtml` | `string` (HTML fragment) | The Background/core-idea explainer, pre-rendered HTML, substituted into `__NARRATIVE_HTML__`. |
+| `narrativeHtml` | `string` (HTML fragment) | The human-first explainer (the one-sentence summary and the problem story), pre-rendered HTML, substituted into `__NARRATIVE_HTML__`. |
 | `files`         | `array` of file objects  | See below. Capped at 30 fully-rendered entries (see `overflowFiles`).                      |
 | `overflowFiles` | `array`                  | Files beyond the 30-file render cap. See below.                                            |
 | `aiAnnotations` | `array` of annotation objects | AI pre-seeded annotations (contract §1), always `origin: "ai"`, `accepted: false` at injection time. |
@@ -181,7 +181,7 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
   "prUrl": "https://github.com/acme/catalog-service/pull/482",
   "branch": "fix/date-parsing-guard",
   "headRefOid": "9f3a1c2b8e4d5f60718293a4b5c6d7e8f9012345",
-  "narrativeHtml": "<section class=\"panel\"><h2>Background</h2><p>formatDate() silently returned an empty string for malformed input, which masked bad data upstream.</p></section>",
+  "narrativeHtml": "<section class=\"panel\"><h2>The problem</h2><p>formatDate() silently returned an empty string for malformed input, which masked bad data upstream.</p></section>",
   "files": [
     {
       "filename": "src/utils/formatDate.js",

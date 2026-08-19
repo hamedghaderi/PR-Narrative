@@ -4,8 +4,13 @@
 
 Review pull requests as a story, not a wall of code.
 
-PR Narrative adds a human review layer between coding agents and GitHub, on both sides
-of a pull request:
+PR Narrative is a translator between the person who wrote the code and everyone else
+who needs to understand the change: reviewers, QA, and teammates who are new to the
+codebase. It puts the human explanation first and the technical explanation last, in
+that order.
+
+It adds a human review layer between coding agents and GitHub, on both sides of a
+pull request:
 
 - **Reviewer mode:** review a real diff in an interactive browser UI, accept or reject AI findings, and create one pending GitHub review
 - **Author mode:** turn your branch diff into a reviewer-friendly PR description
@@ -56,7 +61,10 @@ Reviewing a local branch posts nothing anywhere.
 Branch diff → narrative PR body → section-by-section approval → revision loop →
 **final Markdown**
 
-It writes the description from the code rather than the ticket. You Approve or
+It writes the description from the code rather than the ticket, and structures it so
+a reader can understand the change without opening the diff. A one-sentence summary
+comes first, then the problem story, a concrete example, what QA should test, what the
+change deliberately leaves untouched, and technical details last. You Approve or
 Request-change each section, your decisions go back through a small bundled local
 server, and it revises until everything is approved. The body fills your repo's PR
 template and stands on its own.
@@ -78,9 +86,8 @@ file chips instead.*
 
 ![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
 
-*Two adjacent sections, two independent verdicts: "Description" is green "Approved",
-"Before → After" is amber "Changes requested". Each section carries its own state until
-every one is approved.*
+*Two adjacent sections, two independent verdicts: one approved, one with changes
+requested. Each section carries its own state until every one is approved.*
 
 The Markdown body that ships alongside the page makes the same change concrete:
 

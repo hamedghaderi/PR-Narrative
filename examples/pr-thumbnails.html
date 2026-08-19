@@ -63,7 +63,13 @@
 <div class="subtitle">Pull request · visual companion</div>
 <h1>Batch thumbnail downloads via a CDN bundle endpoint</h1>
 
-<h2>Background (Why?)</h2>
+<h2>In one sentence</h2>
+<p>
+  Category rebuilds now pull every thumbnail in a category as a single archive instead
+  of hammering the CDN with one image at a time.
+</p>
+
+<h2>The problem</h2>
 <p>
   The catalog service builds product thumbnails by asking the CDN for one image at a
   time: a single request per thumbnail. That works fine on a product page, where only
@@ -76,16 +82,21 @@
   rebuild just stops where it is. The other 39 images are never even requested, and
   there's no retry, no resume, just a category stuck at 5 thumbnails out of 45.
 </p>
+<p>
+  The rebuild also gives up badly. It doesn't skip the rate-limited image and carry on,
+  and it doesn't record which images already succeeded, so the next run starts from the
+  beginning and walks into the same wall.
+</p>
 
+<h2>What changes</h2>
 <div class="callout">
-  <b>The core idea</b>
-  Category rebuilds now ask the CDN for the whole category as one <span class="mono">.zip</span>,
-  through a <span class="mono">?bundle</span> endpoint, instead of requesting each image
-  on its own. The archive gets unpacked locally, and only images the bundle doesn't
-  have fall back to the old per-image download.
+  <b>In short</b>
+  Category rebuilds now ask the CDN for the whole category as one archive, instead
+  of requesting each image on its own. The archive gets unpacked locally, and only
+  images the bundle doesn't have fall back to the old per-image download.
 </div>
 
-<h3>Before → After</h3>
+<h2>Before and after</h2>
 <div class="visual-grid">
 
   <div class="panel">
@@ -111,8 +122,7 @@
 
       <div class="step-box">
         <div class="arrow-in">↓</div>
-        Unpack locally: the <span class="mono">.zip</span> becomes an in-memory
-        <span class="mono">id → image bytes</span> map, no further network calls
+        Unpack locally, no further network calls
       </div>
 
       <div class="chips">
@@ -135,11 +145,19 @@
 <div class="callout tip">
   <b>Why a threshold, not always-bundle</b>
   Bundling only kicks in once a job asks for more than 2 images. A single product
-  page still fetches its one thumbnail the old way, since building and unpacking a
-  <span class="mono">.zip</span> for one image isn't worth it.
+  page still fetches its one thumbnail the old way, since building and unpacking an
+  archive for one image isn't worth it.
 </div>
 
-<h2>By the numbers</h2>
+<h2>Example</h2>
+<p>
+  Take the shoes category, 45 images. Before this change the rebuild fired 45 separate
+  requests and died on the sixth with a <span class="badge badge-429">429</span>,
+  leaving 5 of 45 thumbnails built and the category looking broken. After it, one
+  bundle request returns the whole folder, the images come straight out of the
+  unpacked archive, and the one image the bundle doesn't carry is fetched on its own.
+  All 45 get built.
+</p>
 <table>
   <tr><th>Scenario</th><th>Requests before</th><th>Requests after</th></tr>
   <tr><td>Single product page (1 image)</td><td>1</td><td>1 (unchanged)</td></tr>
@@ -147,6 +165,47 @@
   <tr><td>Supplier import (spanning 3 folders)</td><td>~135</td><td>3</td></tr>
 </table>
 
+<h2>What QA should test</h2>
+<div class="panel">
+  <div class="panel-head">Observable checks</div>
+  <div class="panel-body">
+    <div class="req-row">
+      <span>Load a single product page</span>
+      <span class="badge badge-200">thumbnail identical</span>
+    </div>
+    <div class="req-row">
+      <span>Rebuild a category of more than a couple dozen images</span>
+      <span class="badge badge-200">all built, no 429</span>
+    </div>
+    <div class="req-row">
+      <span>Rebuild a category with one image missing from the bundle</span>
+      <span class="badge badge-200">that one falls back</span>
+    </div>
+    <div class="req-row">
+      <span>Run a job that touches 2 images or fewer</span>
+      <span class="badge badge-skip">old per-image path</span>
+    </div>
+  </div>
+</div>
+
+<h2>What this does not change</h2>
+<p>
+  How thumbnails are stored, named, and served stays exactly the same, and so does the
+  single product page path. Only the way the CDN receives the download requests changes.
+</p>
+
+<h2>Technical details</h2>
+<p>
+  Category downloads hit the <span class="mono">?bundle</span> endpoint to collect every
+  image in the category as one <span class="mono">.zip</span>. The archive is unpacked
+  locally into an <span class="mono">id → image bytes</span> map, and only images the
+  bundle doesn't contain fall back to per-image downloads. A bundle that times out takes
+  the same fallback. An access-denied response does not: when the token can't see the
+  category at all, retrying image by image would only hide a permissions problem, so
+  that failure is raised immediately. The bundling threshold is 2 images.
+</p>
+
+<h2>Risks / trade-offs</h2>
 <div class="callout">
   <b>Trade-off</b>
   Unpacking a category's <span class="mono">.zip</span> loads every image in that

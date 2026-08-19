@@ -48,10 +48,10 @@ Each reviewable section has a stable `id`. The exported file looks like:
   "generated_at": "2026-07-22T14:00:00Z",
   "overall": "approved",            // "approved" | "changes_requested" | "pending"
   "sections": [
-    { "id": "background",   "decision": "approved",          "comment": "" },
-    { "id": "core-idea",    "decision": "changes_requested", "comment": "lead with the 429, not the bug" },
-    { "id": "visual",       "decision": "approved",          "comment": "" },
-    { "id": "tradeoff",     "decision": "pending",           "comment": "" }
+    { "id": "one-sentence", "decision": "approved",          "comment": "" },
+    { "id": "problem",      "decision": "approved",          "comment": "" },
+    { "id": "what-changes", "decision": "changes_requested", "comment": "lead with the empty page, not the API" },
+    { "id": "qa",           "decision": "pending",           "comment": "" }
   ]
 }
 ```
@@ -67,19 +67,24 @@ copies the embedded Markdown body to the clipboard and contributes nothing to th
 
 Reuse the base CSS palette from `html-visual.md` (GitHub-native colors) so the review
 page looks consistent with the visual companion. Render the real PR content the skill
-generated (the actual Background prose, the styled before/after panels, tables), each
-wrapped in a `<section data-review-id="...">` with a review control bar underneath.
+generated (the actual generated narrative sections (per the pinned structure in
+`references/markdown-body.md`), the styled before/after panels, tables), each wrapped in
+a `<section data-review-id="...">` with a review control bar underneath.
 
 ### Section wrapper + control bar
 
-Give every reviewable block a stable `data-review-id` and drop in the control bar:
+Give every reviewable block a stable `data-review-id` and drop in the control bar.
+Every section present in the generated body gets its own control: a Core-4 body renders
+four review controls, a full body renders 11. The slugs come from the pinned structure
+in `references/markdown-body.md`, so each `<section>` matches one generated section.
 
 ```html
-<section class="review-section" data-review-id="background" data-review-label="Background (Why?)">
-  <h2>Background (Why?)</h2>
-  <!-- the actual generated Background prose / callouts go here -->
+<section class="review-section" data-review-id="problem" data-review-label="The problem">
+  <h2>The problem</h2>
+  <!-- the actual generated The problem prose / callouts go here -->
   <p>The Incoming Requests page could only filter by status, method, and a coarse
-     period …</p>
+     period, so support engineers had to export to Excel to answer even simple
+     customer questions.</p>
 
   <!-- control bar (identical markup for every section; JS wires it up) -->
   <div class="review-bar">

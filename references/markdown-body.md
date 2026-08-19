@@ -5,12 +5,16 @@ who never opens the HTML still gets the full narrative from GitHub-rendered Mark
 It never links back to the local review page (see §3).
 
 Write it as a short story a reviewer can follow without outside context, not a
-paraphrase of the ticket. Assume the reader hasn't read the ticket or the commit
-message, and might be a junior developer on the team: they need every technical fact
-that matters, just not the assumed background you already carry in your head. Every
-claim in the Background and Description should trace back to the diff or to code you
-actually read. The ticket is there to fact-check names and numbers, never to lift
-sentences from.
+paraphrase of the ticket. The reader model is fixed: assume the reader has never seen
+this feature before, does not know the architecture, does not know the business
+terminology, and can read basic code but should not need to read code to understand
+the PR. The measurable test is: a reader should understand the problem and expected
+behavior without opening the diff. If they need the code to understand the story,
+PR-Narrative failed.
+
+Assume the reader hasn't read the ticket or the commit message. Every claim in the
+body should trace back to the diff or to code you actually read. The ticket is there
+to fact-check names and numbers, never to lift sentences from.
 
 All example content here uses a generic, invented scenario (batching image downloads
 through a CDN bundle endpoint) purely to show the shape. Replace it with the real
@@ -21,9 +25,10 @@ change.
 1. GitHub callout syntax
 2. Comparison / benchmark tables
 3. No links to the local review page
-4. Filling the repo's PR template
-5. Title conventions
-6. Full worked example (a finished Markdown body)
+4. The default body structure
+5. Filling the repo's PR template
+6. Title conventions
+7. Full worked example (a finished Markdown body)
 
 ---
 
@@ -77,7 +82,7 @@ reviewer on GitHub gets the full story with nothing to open locally.
 ```markdown
 > [!TIP]
 > A styled before/after walkthrough of this change was shared separately as a visual
-> companion. The Background and Description below tell the same story on their own.
+> companion. The narrative below tells the same story on its own.
 ```
 
 If the user wants the visual embedded some other way (drag-dropped screenshots in the
@@ -86,38 +91,175 @@ the skill never uploads or opens the PR.
 
 ---
 
-## 4. Filling the repo's PR template
+## 4. The default body structure
 
-Detect the repo's PR template (usually `.github/pull_request_template.md`) and keep its
-exact section headers and checklists. Many templates use a "why / how" shape; for
-example a template with `## Background (Why?)` and `## Description (How?)` maps
-directly onto this skill:
+When the repo has no PR template, use these 11 sections in exactly this order. The
+structure is two-layered: sections 1-9 are the human explanation, sections 10-11 are
+the supporting technical layer. Apply the doctrine "Human explanation → Technical
+explanation, never the reverse."
 
-- **Background / Why** → tell it as a small scene: what the system does today, what
-  concretely goes wrong, and why that actually hurts someone. Pull every detail from
-  the diff or from code you've read, not from the ticket; the ticket is only there to
-  check you got a name or a number right. Write for a reviewer who hasn't seen the
-  ticket and might be junior: keep the technical facts, drop the assumed context. Add
-  a `> [!NOTE]` for any term a newcomer would trip on. End with `Closes #xxxx` if
-  there's a linked issue. If the story fits in one line, one line is enough; don't pad
-  it into paragraphs it doesn't need.
-- **Description / How** → open with the one-sentence core idea, in plain words, then
-  show what things look like now that it's fixed. Link to the HTML visual, walk the
-  before/after in a sentence or two plus a comparison table, and name the trade-off
-  honestly. **No method-name dumps, no file-by-file listing.** One idea per
-  paragraph; if a paragraph is doing two jobs, split it.
-- **Affected areas / models** (if the template has it) → a *short* bulleted list of
-  surfaces, not files.
-- **Testing / QA** → a couple of concrete things worth checking, not a checklist for
-  its own sake.
+### In one sentence
 
-If the branch bundles unrelated work, add a brief `### Also bundled in this branch`
-list under the Description and say so honestly, rather than pretending it's one story.
-If the repo has no template, fall back to the structure in `SKILL.md`.
+The hardest sentence. A single plain-language statement of what this PR does. If it
+cannot be written without method names, classes, or architecture jargon, the author
+has not yet understood the change.
+
+### The problem
+
+What someone was trying to do and what went wrong. Preface or close with `Closes #N`
+when a ticket is linked. This is not an abstract category; name the real situation
+that started the work.
+
+### What happens today
+
+Life before this PR: the manual workaround, the missing capability, or the broken
+behavior a user actually sees. For net-new features, describe what is impossible or
+awkward today. Never manufacture a fake bug just to create narrative tension.
+
+### Why that's a problem
+
+The consequence. Who feels pain, what it costs, or why the current state is unsafe or
+unacceptable. Keep it concrete.
+
+### What changes
+
+One simple sentence first, then technical elaboration if needed. If the change is
+trivial enough that no concrete example exists, omit the Example section and state
+why in one line here.
+
+### Before and after
+
+A compressed scene or comparison table that shows the same situation played out under
+the old code and the new code. Use arrows, tables, or numbered steps; do not dump file
+paths or identifiers.
+
+### Example
+
+One truthful, concrete walkthrough with toy numbers. Mandatory for any non-trivial
+change. Show an input, the chain of events, and the output. If no truthful concrete
+example exists, omit this section and explain why under What changes.
+
+### What QA should test
+
+Concrete behavioral verifications, not a checklist for its own sake. Write what a
+human tester would actually do and expect to observe.
+
+### What this does not change
+
+The blast-radius limiter. Explicitly fence off adjacent behavior so QA and reviewers
+do not imagine a larger change than the one in the diff.
+
+### Technical details
+
+The only place identifiers (method names, classes, file paths) are permitted, and
+only where a concept-level sentence cannot carry the meaning. Still banned here:
+file-by-file changelogs, diff restatement, "then I refactored X" narration. Sections
+1-9 are ideas-only.
+
+### Risks / trade-offs
+
+Honest limits: performance cost, behavior someone might dislike, edge cases still not
+handled, follow-up work needed.
+
+### Two-layer doctrine
+
+Sections 1-9 explain the change to a human. Sections 10-11 support that explanation
+with technical facts. Never start from the code and try to tack on motivation
+afterward.
+
+### Trivial vs non-trivial
+
+A change is trivial only when it produces no behavior a user or QA could observe or
+regress (typo fix, comment, rename, formatting, dead-code removal). File count is not
+the test.
+
+For trivial PRs, use only the Core-4 sections:
+
+1. In one sentence
+2. The problem
+3. What changes
+4. What this does not change
+
+`Example` and `What QA should test` become mandatory the moment the change is
+non-trivial.
+
+### 8-question checklist
+
+Every non-trivial PR must answer these eight questions, in this order. They are a
+derivation and validation tool, not a literal 1:1 section list.
+
+1. What was someone trying to do?
+2. What went wrong?
+3. Why did it happen?
+4. What does this PR change?
+5. What happens differently now?
+6. Give me one concrete example.
+7. What should QA verify?
+8. What does this PR deliberately NOT solve?
+
+The mapping to the 11 sections:
+
+| Question | Default section |
+| --- | --- |
+| 1 | The problem |
+| 2 | The problem + What happens today |
+| 3 | What happens today + Why that's a problem |
+| 4 | In one sentence + What changes |
+| 5 | Before and after |
+| 6 | Example |
+| 7 | What QA should test |
+| 8 | What this does not change |
+
+### Closes #N placement
+
+Put `Closes #N` at the end of `## The problem` in the default structure, or at the end
+of the mapped background-like section when filling a repo template.
+
+### Worked micro-example
+
+A pagination fix gives us 65,000 rows, a page size of 1,000, and page 40 temporarily
+empty. The body might render the Example section like this:
+
+```markdown
+## Example
+
+1. A job asks for page 40 of a 65,000-row dataset with page size 1,000.
+2. The upstream source returns an empty page because that slice is temporarily blank.
+3. Old path: importer sees `{}` → stops → finishes the import early.
+   New path: importer sees `{}` → keeps a cursor → tries page 41 → finishes only
+   after the real end of the data.
+4. Result: all 65 pages are imported; the temporary empty page does not abort the
+   job.
+```
 
 ---
 
-## 5. Title conventions
+## 5. Filling the repo's PR template
+
+Detect the repo's PR template (usually `.github/pull_request_template.md`) and keep its
+exact section headers and checklists verbatim. Do not invent new `##` sections inside
+the template. Instead, map the narrative order into the template's existing shape.
+
+- Open the body with the In-one-sentence content as a bold lead-in line above the
+  first template header: `**In one sentence:** ...`. No new `##` header is inserted;
+  the repo template's own headers stay untouched.
+- Pour each remaining section into the closest matching template section. Background /
+  Why / Motivation sections take The problem, What happens today, and Why that's a
+  problem. Description / How / Changes sections take What changes and Before and
+  after.
+- QA, Example, Risks, or What this does not change content with no natural home is
+  appended as extra sections after the template's own sections, keeping the canonical
+  headings.
+- Put `Closes #N` at the end of the mapped background-like section, not at the top of
+  the body.
+- If the branch bundles unrelated work, add a brief `### Also bundled in this branch`
+list under the most relevant template section and say so honestly, rather than
+pretending it's one story.
+- If the repo has no template, fall back to the default 11-section structure in §4.
+
+---
+
+## 6. Title conventions
 
 Follow the repo's convention. Conventional-commit style, readable as a release-note
 line, is a safe default:
@@ -131,7 +273,7 @@ itself.
 
 ---
 
-## 6. Full worked example
+## 7. Full worked example
 
 A finished Markdown body for the generic thumbnail-batching change lives alongside this
 reference at `examples/pr-body-thumbnails.md`. It reads like something a teammate told

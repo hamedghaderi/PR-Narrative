@@ -22,7 +22,7 @@ with the actual change you're documenting.
 
 ## 1. Page skeleton + base CSS
 
-Keep it one clean page: a title, the Background narrative, the styled before/after
+Keep it one clean page: a title, the human-first narrative sections, the styled before/after
 visual, then the Description narrative. This palette leans on GitHub's own colors so
 the panels feel native when screenshots land in a PR.
 

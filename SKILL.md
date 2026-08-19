@@ -23,14 +23,21 @@ Most PR descriptions are written for the author, not the reviewer. They list whi
 files changed and restate the diff in prose, information the reviewer can already
 see. The result is a wall of text that adds no understanding.
 
-A *good* PR description does the opposite: it gives the reviewer the context and the
-mental model they need **before** they read a single line of the diff. It answers
-"why does this change exist?" and "what's the core idea?", and it uses a clear
-before/after picture, small examples, and comparisons to do it, because those
-compress understanding far better than paragraphs or a mermaid box-and-arrow blob.
+PR Narrative is a translator between the person who wrote the code and everybody
+else who needs to understand the change: reviewers, QA, and teammates new to the
+code. A *good* PR description gives the reader the context and the mental model
+they need **before** they read a single line of the diff. It answers "why does
+this change exist?" and "what changed?", using a clear before/after picture, small
+examples, and comparisons, because those compress understanding far better than
+paragraphs or a mermaid box-and-arrow blob.
+
+The two-layer doctrine drives every mode below: **human explanation first,
+technical explanation last.** Lead with a plain-language story anyone on the team
+can follow; only once that story is told does the technical layer get to name a
+class, a file, or a method. Never the other way around.
 
 That's **author mode**: it mirrors the look and feel of the `explain-diff` skill's
-**Background** and **Intuition**, shaped for a PR.
+narrative and intuition sections, shaped for a PR.
 
 The same narrative discipline is useful the other way around: when you're the one
 reviewing a PR (someone else's, or your own local branch before you open one), you
@@ -89,19 +96,24 @@ If a PR reference was given but `gh` is missing or unauthenticated, say so plain
 offer the local-branch path instead. Do not guess at the contents of a PR you cannot
 read, and do not silently fall back to something the user never asked for.
 
-**What the message looks like.** Five beats, in this order, all in chat:
+**What the message looks like.** Six beats, in this order, all in chat:
 
-1. **The hallway sentence.** The change in 20 seconds, in plain words.
-2. **Background as a scene.** What someone does today and what concretely goes wrong for
-   them, with concrete toy data ("a 30-day backfill fired 30 sequential requests").
-3. **The core idea**, one plain sentence, before any elaboration.
+1. **In one sentence.** The change in 20 seconds, in plain words, with no
+   identifiers or architecture jargon.
+2. **The problem, as a scene.** What someone does today and what concretely goes
+   wrong for them, with concrete toy data ("a 30-day backfill fired 30 sequential
+   requests").
+3. **What changes**, one plain sentence, before any elaboration.
 4. **Before and after**, described conceptually: prose, or a small Markdown comparison
    table. No HTML.
-5. **Trade-offs and edge cases** worth knowing.
+5. **One concrete example**, when the change is non-trivial.
+6. **What this does not change, and any trade-offs** worth knowing.
 
 Follow the **Writing style** section below to the letter: story doctrine, every claim
-sourced from the code rather than the ticket, junior-readable, ideas not identifiers, and
-no em dashes anywhere.
+sourced from the code rather than the ticket, no identifiers above the technical layer,
+and no em dashes anywhere. The measurable bar: "A reader should understand the problem
+and expected behavior without opening the diff." If they need the code to understand
+the story, PR-Narrative failed.
 
 One contrast worth naming: for a full standalone teaching document with a code
 walkthrough and a quiz, that's the separate `explain-diff` skill, not this subcommand.
@@ -142,7 +154,7 @@ changed **per concern**, not per file (one bullet for "retries now back off", no
 bullet per touched file), then notable risks or trade-offs if there are any. A few lines
 total. If the change is trivial, a single paragraph is a correct and sufficient answer;
 padding it out is a defect. Same style rules as `explain`: plain words, concrete toy data,
-ideas not identifiers, no em dashes.
+no identifiers, a summary never needs the technical layer, no em dashes.
 
 ## Which mode? (decide this first)
 
@@ -151,7 +163,7 @@ question, even when you can infer it from context. Describe both modes in one pl
 sentence each and mark the inferred mode as recommended:
 
 - **Author mode:** "I write the PR description for your changes (the *why* and the
-  *core idea*) and open it in an interactive review page."
+  *one-sentence summary*) and open it in an interactive review page."
 - **Reviewer mode:** "I render the diff so you can comment on lines; for a real PR
   your comments post as a pending GitHub review you finalize on github.com."
 
@@ -181,8 +193,9 @@ directly.
    self-contained, inline CSS/JS, no server. This is the centerpiece and it **opens
    automatically in the browser**. It holds the *rich visual* (report-quality
    before/after panels, colored request rows, a red failure, an "extract" step,
-   little file chips, plus the Background and Description narrative, exactly the
-   look people love from `explain-diff`), and on top of that, each section carries an
+   little file chips, plus the human-first narrative: the one-sentence summary, the
+   problem story, before/after, example, QA guidance, and the technical layer,
+   exactly the look people love from `explain-diff`), and on top of that, each section carries an
    **Approve / Request-change** control and a comment box, with a **Download
    decisions** button. The user reviews section by section right in the page. Build
    the visuals the same way `explain-diff` does: one clean page, styled panels, **no
@@ -218,8 +231,9 @@ callout syntax, tables, template filling) read `references/markdown-body.md`.
 
 ### What author mode is (and isn't)
 
-- **Is:** a narrative, visual PR description (the *why* and the *essence*), with a
-  styled HTML before/after visual and a clean Markdown body.
+- **Is:** a human-first, two-layer PR description (the *why* and the *essence*
+  before any technical detail), with a styled HTML before/after visual and a clean
+  Markdown body.
 - **Isn't:** a code review, a quality/confidence score, a per-file changelog, a
   commit message, or release notes. If the user wants a full standalone teaching
   document with a code walkthrough and a quiz, that's `explain-diff`. If the user
@@ -227,9 +241,13 @@ callout syntax, tables, template filling) read `references/markdown-body.md`.
 
 The most common failure mode is drifting into a file-by-file "I changed X in Y, then
 refactored Z" listing, or dumping method names ("`downloadSourceFilesInBulk()`
-groups the files…"). Reviewers don't need that; the diff shows the *what* and the
-*where*. Your job is the *why* and the *idea*. Explain at the level of concepts, not
-identifiers.
+groups the files…") anywhere above `## Technical details`. The diff already shows
+the *what* and the *where*; sections 1 through 9 of the body (see
+`references/markdown-body.md`) owe the reader the *why* and the *idea*, at the
+level of concepts, never identifiers. `## Technical details`, section 10, is the
+only place identifiers are sanctioned, and even there the same discipline holds: no
+file-by-file changelog, no diff restatement, no "then I refactored X" narration,
+only the identifiers a concept-level sentence genuinely couldn't carry.
 
 ### The workflow
 
@@ -255,31 +273,35 @@ cheap once you get it.
 
 #### 2. Find the intuition
 
-Before writing, work out the story arc, one or two sentences per beat:
+Before writing, answer these eight questions, in order (the mapping from each
+question onto a body section is defined in `references/markdown-body.md`):
 
-- **The scene.** What does a user or developer do today, and what concretely goes
-  wrong for them (derived from reading the code path itself, not the ticket)? Use
-  concrete toy data ("a 30-day backfill fired 30 sequential requests").
-- **The hallway sentence.** If you explained the fix to a colleague in the hallway in
-  20 seconds, what would you say, in plain words? That sentence opens the Description.
-- **The before/after.** What did the old path look like, and the new one? This becomes
-  your styled visual.
-- **The trade-off.** What did this approach cost or rule out? Reviewers trust an honest
-  PR more.
+1. What was someone trying to do?
+2. What went wrong?
+3. Why did it happen?
+4. What does this PR change?
+5. What happens differently now?
+6. Give me one concrete example.
+7. What should QA verify?
+8. What does this PR deliberately NOT solve?
 
 If you can't answer these, you don't understand the change yet; go back to step 1. And
 if your answers sound like the ticket, you haven't understood the change; you've only
-read about it.
+read about it. If you cannot write `## In one sentence` without a class name or
+architecture jargon, you do not understand the PR yet.
 
 #### 3. Write the Markdown body, build the review page, serve it, and open it
 
 **First, write the Markdown body**, filling the repo's template, since the page embeds it,
-so it has to exist before the page is built. Detect and respect the repo's PR template
-(e.g. `.github/pull_request_template.md`). Keep its section headers and required
-checklists. Many templates use a "why / how" shape, e.g. `## Background (Why?)` and
-`## Description (How?)`, which maps directly onto this skill.
+so it has to exist before the page is built. Detect the repo's PR template (e.g.
+`.github/pull_request_template.md`). If one exists, keep its section headers and
+required checklists and map the narrative into them, per `references/markdown-body.md`.
+If the repo has no template, use the default structure: the 11 pinned sections defined
+in `references/markdown-body.md`, in their pinned order. If the change is trivial (no
+observable behavior a user or QA could notice or regress: a typo, a rename, a
+formatting pass), the Core-4 subset from the same reference is enough on its own.
 
-Fill them with narrative, using GitHub `> [!NOTE]` / `> [!TIP]` callouts for
+Fill it with narrative, using GitHub `> [!NOTE]` / `> [!TIP]` callouts for
 definitions and edge cases, and Markdown comparison/benchmark tables for the
 before/after numbers. Write the **body only**: no PR title (GitHub takes that in its
 own field) and **no local links at all**: not the HTML review page, not a `localhost`
@@ -288,7 +310,7 @@ where none of those resolve. See `references/markdown-body.md` for conventions a
 worked example. Save to `/tmp/pr-body-<branch>.md`.
 
 **Then create the self-contained HTML review page**: the report-quality before/after
-panels + Background/Description narrative (styling from `references/html-visual.md`),
+panels + the human-first narrative (styling from `references/html-visual.md`),
 with each reviewable block wrapped in a `<section data-review-id="…">` carrying the
 Approve / Request-change control bar, plus the sticky action bar and the submit
 JavaScript (all from `references/review-ui.md`). Set `<body data-branch="…">` so
@@ -409,12 +431,14 @@ See `references/review-ui.md` for the decisions schema and the exact behavior.
 ### Writing style
 
 Write with the clarity and flow of a good technical essayist: engaging, plain, with
-smooth transitions. Picture the target reader precisely: a reviewer who has NOT read
-the ticket or the commit message (including a junior developer on the team) and
-must understand both the problem and the solution from the PR body alone.
-Junior-comprehensible does not mean dumbed down: keep every technical fact, just drop
-the context you'd otherwise assume the reader already has. Respect their time: every
-sentence should give understanding they lacked.
+smooth transitions. Picture the target reader precisely: assume the reader has never
+seen this feature before, does not know the architecture, does not know the business
+terminology, and can read basic code but should not need to read code to understand
+the PR. Plain does not mean dumbed down: keep every technical fact, put it in its
+layer. Respect the reader's time: every sentence should give understanding they
+lacked. The bar is measurable, not a feeling: "A reader should understand the
+problem and expected behavior without opening the diff." If they need the code to
+understand the story, PR-Narrative failed.
 
 - **Tell it as a story, not a summary.** Background is a scene: what someone does
   today, what concretely goes wrong for them, and why that hurts. Not a restatement
@@ -428,19 +452,26 @@ sentence should give understanding they lacked.
   paraphrase them into the prose. If you catch yourself re-wording the ticket, delete
   the sentence and re-derive it from the code instead.
 - **Favor a few short paragraphs over hard caps.** There's no word-count limit here on
-  purpose. One idea per paragraph, and if a junior reader would need to reread a
+  purpose. One idea per paragraph, and if a reader would need to reread a
   sentence, rewrite it. A section that can be one line should be one line. A wall of
   text is a defect even when every sentence in it is true.
 - **Reach for plain words first.** Prefer everyday language over jargon; when jargon
   is unavoidable, define it in half a sentence, inline, right where it appears.
 - **Lead with the point.** The first two sentences of Background make the problem
-  obvious. The first sentence of the Description is the core idea.
+  obvious. The first sentence of the Description is the one-sentence summary.
 - **Concrete toy data over abstractions.** "30 sequential requests → HTTP 429" beats
   "many requests were made".
 - **Show, don't tell.** The styled before/after visual and a comparison table beat
   three descriptive paragraphs.
-- **Ideas, not identifiers.** Explain what happens conceptually. Don't narrate method
-  names or file paths; the diff has those.
+- **Two layers, in order.** Human explanation first, technical explanation last,
+  never the reverse: tell the whole story in plain language before a single
+  identifier appears.
+- **Ideas above, identifiers below.** Sections above `## Technical details` explain
+  what happens conceptually; method names, classes, and file paths live only in
+  `## Technical details`, and only where a plain sentence can't carry the meaning.
+- **Answer the eight questions.** Before writing, work through the checklist in
+  step 2 above; if the answers sound like the ticket, you've only read about the
+  change.
 - **Be honest about limits.** A noted trade-off or edge case builds trust and saves
   review round-trips.
 - **Cut anything the diff already says.** If a sentence just restates the diff, delete
@@ -453,11 +484,18 @@ sentence should give understanding they lacked.
 
 ### Quality bar: author mode
 
-Re-read both artifacts as if you were the reviewer:
+Re-read both artifacts as if you were the reader:
 
-- Could a reviewer who's never seen this code understand *why* it exists from the
-  Background alone?
-- Is the core idea stated in one clear sentence at the top of the Description?
+- Is `## In one sentence` (or its bold lead-in line, when mapped into a repo
+  template) free of identifiers and architecture jargon?
+- Does the body answer the eight questions from step 2, in order, even where the
+  answers are folded into fewer sections?
+- Is every identifier confined to `## Technical details`, with sections above it
+  staying at the concept level?
+- Does `## What QA should test` (or the mapped equivalent) name observable
+  behaviors a QA person could execute, without referencing test files or code?
+- Is `## What this does not change` present and truthful, actually limiting the
+  blast radius rather than restating what changed?
 - Does the review page have a genuinely helpful styled before/after visual (not
   decoration), and does every reviewable section have its Approve / Request-change
   control bar wired up?
@@ -465,15 +503,13 @@ Re-read both artifacts as if you were the reviewer:
   export valid `pr-review-decisions.json`?
 - Is the Markdown body complete on its own, with no local links (no review-page,
   `localhost`, or `/tmp` references) that would dangle for a reader on github.com?
-- Did you avoid a file-by-file listing and method-name dumps? (If you see "then I
-  changed…" or "`someMethod()` does…", cut or rephrase to the idea level.)
 - Is the main trade-off named honestly?
 - Does it fit the repo's template and title conventions (conventional-commit title,
   `[Internal]` when it shouldn't hit release notes)?
-- Is every claim in Background/Description traceable to the diff or code behavior,
-  not to the ticket, commit message, or what the author told you?
-- Would a junior developer on the team follow the story on a single read, with no
-  sentence they'd have to reread, no unexplained jargon?
+- Is every claim traceable to the diff or code behavior, not to the ticket, commit
+  message, or what the author told you?
+- Could a reader understand the problem and the expected behavior without opening
+  the diff? If they need the code to follow the story, the body failed.
 
 If any answer is "no", fix it before delivering.
 
@@ -512,10 +548,11 @@ understand:
   actual changed code).
 - For non-trivial or multi-module PRs, fire `explore` agents in parallel to map the
   before/after and call sites, exactly as in author mode. Write the same short
-  Background/core-idea narrative, following the exact same story doctrine as author
-  mode's Writing style (code-first sourcing, junior-readable, story arc) rather than
-  restating it here. It becomes the collapsible narrative panel at the top of the
-  annotation page (styled the same as author mode's panels).
+  human-first narrative (the one-sentence summary and the problem story), following
+  the exact same story doctrine as author mode's Writing style (code-first
+  sourcing, the reader model, story arc) rather than restating it here. It becomes
+  the collapsible narrative panel at the top of the annotation page (styled the
+  same as author mode's panels).
 
 ### 3. AI pre-seed (optional, capped, locked policy)
 

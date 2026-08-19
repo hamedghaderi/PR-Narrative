@@ -50,7 +50,7 @@ diff_json = {
     "prUrl": "https://github.com/{o}/{r}/pull/123",  # null in local mode
     "branch": "feature/xyz",
     "headRefOid": "abc123...",          # null in local mode
-    "narrativeHtml": "<section class=\"callout\"><b>Background</b><p>...</p></section>",
+    "narrativeHtml": "<section class=\"callout\"><b>In one sentence</b><p>...</p></section>",
     "files": body["files"],
     "overflowFiles": body["overflowFiles"],
     "aiAnnotations": [],                # filled in step 2 below
@@ -60,7 +60,7 @@ json.dump(diff_json, open("/tmp/pr-{n}-diff.json", "w"))
 PYEOF
 ```
 
-`narrativeHtml` is the Background/core-idea explainer. Write it using the same panel
+`narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story). Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`
 block (`.panel`, `.panel-head`, `.panel-body`, `.callout`, `.callout.tip`), which is
 copied straight from `references/html-visual.md`. You're writing the *inner* HTML that

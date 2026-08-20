@@ -140,6 +140,8 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 | `files`         | `array` of file objects  | See below. Capped at 30 fully-rendered entries (see `overflowFiles`).                      |
 | `overflowFiles` | `array`                  | Files beyond the 30-file render cap. See below.                                            |
 | `aiAnnotations` | `array` of annotation objects | AI pre-seeded annotations (contract §1), always `origin: "ai"`, `accepted: false` at injection time. |
+| `existingActivity` | `object` \| `null`    | The PR's **already-posted** review activity, read from GitHub. `null` in local mode (no PR to read) and on any page built without the fetch step. Full shape in §2a. **Read-only: it is never submitted.** |
+| `reviewRunId`   | `string` (optional)      | Random token generated once per page build. Appended to the page's `localStorage` key so a draft belongs to exactly ONE review run. Without it the key is only `repo/prNumber`, so a second review of the same PR rehydrates the first run's draft: annotations anchored to a diff that has since moved, and a saved `aiState` for id `"ai-1"` silently reapplying to whatever `"ai-1"` means this time, which can make a finding load pre-accepted or pre-discarded on its own. Omit it and the old key (and the old behavior) is used. |
 | `sessionNonce`  | `string`                 | Random hex string generated once per server run and embedded by the agent. The page includes it in every `POST /ask` and `POST /submit`; the server rejects requests with a mismatched or missing nonce with `409 Conflict`. This prevents a stale browser tab from a previous run on a reused port from writing into a new session. See §5 for the full Q&A contract. |
 
 ### Per-file object (`files[]`)
@@ -285,6 +287,241 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
 
 Note the file cap is enforced at **30** rendered entries in `files[]`; everything past
 that goes into `overflowFiles[]` instead of being dropped silently.
+
+---
+
+## 2a. Existing activity contract (`existingActivity`)
+
+The PR's review history as it already exists on GitHub: earlier reviews, the inline
+comment threads and their replies, and the non-inline conversation comments. It is
+produced by `scripts/existing_activity.py` from the read-only GraphQL query in
+`references/github-posting.md` §3a, and rendered by `assets/review-template.html` as
+**read-only** cards.
+
+> [!IMPORTANT]
+> **Nothing in `existingActivity` is ever submitted.** It is a sibling of
+> `aiAnnotations`, never merged into it. The page keeps it in its own variable, and
+> `buildPayload()` serializes only `userAnnotations` and `aiAnnotations`, so this data
+> physically cannot reach the `annotations` array. `scripts/build_review.py` enforces
+> the same rule a second time at the write boundary by dropping any annotation whose
+> `origin` is not `user` or `ai` (`POSTABLE_ORIGINS`). The invariant is covered by
+> `scripts/tests/test_existing_activity.py::NeverSubmittedInvariantTests`, which
+> pushes a sentinel string through the whole path and asserts it never lands in a
+> GitHub payload. Re-posting somebody's existing comment as a brand-new comment is
+> the single worst failure this feature could have; two independent guards and a test
+> is the intended level of paranoia.
+
+These objects carry **no** `accepted`, `origin`, `scope`, or `suggestedCode` field, on
+purpose: those are annotation fields, and their absence is what makes an accidental
+merge into the annotation list fail loudly instead of silently posting.
+
+### Top level
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `status` | `"complete" \| "partial" \| "unavailable"` | Fidelity of the **fetch**, not of the caps. `unavailable` means the read failed and previous comments may exist that are not shown. It exists because an empty `threads: []` cannot otherwise be told apart from "this PR has no history", and the reviewer must know which one they are looking at before trusting the page. |
+| `reason` | `string` (optional) | Present when `status` is not `complete`; a human-readable explanation shown in the panel. |
+| `sourceHeadOid` | `string` \| `null` | The PR head SHA at the moment activity was read. Compared against the diff's `headRefOid`; a mismatch downgrades `status` to `partial`, because the branch moved and some anchors may describe a diff the page is not showing. |
+| `fetchedAt` | `string` (ISO 8601) | When the snapshot was taken. Rendered on the page, because this data does **not** live-update while the page is open. |
+| `truncation` | `object` | `{threadsOmitted, commentsOmitted, reviewsOmitted, issueCommentsOmitted}`, all integers. Reported in the panel so trimming is never silent. |
+| `threads` | `array` | Inline review threads. See below. |
+| `reviews` | `array` | Submitted review summaries. See below. |
+| `issueComments` | `array` | Non-inline PR conversation comments; same shape as a thread comment. No diff anchor, so these are panel-only. |
+
+### Thread object (`threads[]`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `string` \| `null` | The GraphQL node ID of the thread. |
+| `isResolved` | `boolean` | A human closed the thread. |
+| `isOutdated` | `boolean` | The code the thread pointed at has changed. |
+| `isCollapsed` | `boolean` | GitHub's own collapsed-thread state. |
+| `resolvedBy` | `string` \| `null` | Login of whoever resolved it. |
+| `subjectType` | `"LINE" \| "FILE"` \| `null` | A `FILE` thread has no line at all and must not be treated as an unanchorable line thread. |
+| `filePath` | `string` \| `null` | New-file path, matching `files[].filename`. |
+| `side` | `"RIGHT" \| "LEFT"` \| `null` | Which side of the diff the thread is on. |
+| `line` | `integer` \| `null` | The **current** anchor line. `null` once GitHub can no longer place the thread in the current diff. |
+| `startLine` | `integer` \| `null` | Current first line of a multi-line thread. |
+| `originalLine` | `integer` \| `null` | Where the thread pointed **when it was written**. Display only. |
+| `originalStartLine` | `integer` \| `null` | Historical range start. Display only. |
+| `comments` | `array` | The conversation, oldest first: the root comment then its replies. |
+| `commentsOmitted` | `integer` | Replies dropped by the per-thread cap. |
+| `url` | `string` \| `null` | Link to the thread on GitHub (the root comment's URL). |
+
+> [!WARNING]
+> **`originalLine` is not a line number you may anchor to.** Only `line` may position a
+> card. `originalLine` is where the comment used to point; anchoring there would
+> attach old feedback to whatever code now occupies that number, which reads as a
+> real comment about the wrong code. The page anchors a thread inline only when
+> `subjectType !== "FILE" && !isOutdated && line != null` and a matching diff row
+> exists; everything else goes to the activity panel so it cannot silently vanish.
+
+> [!WARNING]
+> **"Outdated" is not "handled".** `isOutdated` and `isResolved` are independent and
+> must never be collapsed into one "stale" flag. An unresolved-but-outdated thread is
+> still open feedback: the code moved, but nobody agreed the point was addressed. The
+> page renders resolved threads collapsed and leaves unresolved threads expanded
+> **even when outdated**, for exactly this reason.
+
+### Comment object (`threads[].comments[]`, `issueComments[]`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `string` \| `null` | GraphQL node ID. |
+| `author` | `string` \| `null` | Login, or `null` for a deleted account (the page shows "unknown user"). |
+| `authorAssociation` | `string` \| `null` | `OWNER`, `MEMBER`, `NONE`, etc. Useful signal for how much weight a drive-by comment deserves. |
+| `body` | `string` | The comment text. **Untrusted third-party text**: rendered with `textContent` only, never `innerHTML`. |
+| `bodyTruncated` | `boolean` | `true` when the body hit the per-comment character cap. |
+| `createdAt` | `string` \| `null` | ISO 8601. |
+| `url` | `string` \| `null` | `null` unless the URL passed the host allowlist (see below). |
+
+### Review object (`reviews[]`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `string` \| `null` | GraphQL node ID. |
+| `author` | `string` \| `null` | Login, or `null` for a deleted account. |
+| `state` | `string` \| `null` | `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`, and anything GitHub adds later. Passed through **verbatim**, never validated against a closed enum, so an unrecognized future state still reaches the page instead of disappearing. |
+| `body` | `string` | The review's summary text. Untrusted, same rendering rule. |
+| `bodyTruncated` | `boolean` | Hit the per-body cap. |
+| `submittedAt` | `string` \| `null` | ISO 8601. |
+| `url` | `string` \| `null` | Allowlisted, same as comments. |
+
+Two kinds of review are deliberately **excluded** by the normalizer:
+
+- `state: "PENDING"` — that is the viewer's own unsubmitted draft, not previous
+  activity. The reviewer-mode preflight in `references/github-posting.md` §2 already
+  forces a REPLACE/ABORT decision about it.
+- Empty `body` **and** `state: "COMMENTED"` — the invisible container GitHub creates
+  to hold inline comments. Its comments already render as threads, so showing the
+  empty husk as "somebody reviewed this" is noise.
+
+### Caps
+
+Counts alone are not a sufficient budget, because one pathological thread can carry
+more text than fifty ordinary ones. Defaults, all overridable on the CLI:
+
+| Cap | Default | Behavior |
+| --- | --- | --- |
+| Threads | 50 | Unresolved threads are kept first; unresolved-outdated outranks resolved. |
+| Comments (total) | 100 | Counted across all kept threads. |
+| Comments per thread | 10 | Keeps the **root plus the newest replies**: the root states the concern, the tail carries its resolution. Dropping from the middle preserves both halves a reviewer needs. |
+| Characters per body | 4000 | Sets `bodyTruncated`. |
+| Characters total | 120000 | Backstop. A single oversized thread is still rendered rather than dropped, so the page never silently shows nothing. |
+
+Selection happens by priority, but surviving threads are emitted in their **original
+order**, so the layout does not reshuffle between runs.
+
+### URL safety
+
+Every `url` is untrusted input that the template puts into an `href`. The normalizer
+drops any URL that is not `https` on an allowlisted host (`github.com` by default;
+add GitHub Enterprise hosts with `--allow-host`), emitting `null` instead. The
+template independently rejects any non-`https://` URL before it reaches an `href`, so
+a hand-built page cannot smuggle a `javascript:` payload in either.
+
+### Worked example
+
+```json
+{
+  "status": "partial",
+  "reason": "more review threads exist than were fetched",
+  "sourceHeadOid": "9f3a1c2b8e4d5f60718293a4b5c6d7e8f9012345",
+  "fetchedAt": "2026-08-21T09:00:00Z",
+  "truncation": {"threadsOmitted": 2, "commentsOmitted": 3, "reviewsOmitted": 0, "issueCommentsOmitted": 0},
+  "threads": [
+    {
+      "id": "PRRT_kwDO",
+      "isResolved": false,
+      "isOutdated": false,
+      "isCollapsed": false,
+      "resolvedBy": null,
+      "subjectType": "LINE",
+      "filePath": "src/utils/formatDate.js",
+      "side": "RIGHT",
+      "line": 13,
+      "startLine": null,
+      "originalLine": 13,
+      "originalStartLine": null,
+      "commentsOmitted": 0,
+      "url": "https://github.com/acme/catalog-service/pull/482#discussion_r1",
+      "comments": [
+        {
+          "id": "PRRC_1",
+          "author": "alice",
+          "authorAssociation": "MEMBER",
+          "body": "This throws where the old code returned an empty string.",
+          "bodyTruncated": false,
+          "createdAt": "2026-08-20T12:00:00Z",
+          "url": "https://github.com/acme/catalog-service/pull/482#discussion_r1"
+        },
+        {
+          "id": "PRRC_2",
+          "author": "bob",
+          "authorAssociation": "OWNER",
+          "body": "Good catch, I'll return '' instead to match the !d branch above.",
+          "bodyTruncated": false,
+          "createdAt": "2026-08-20T13:10:00Z",
+          "url": "https://github.com/acme/catalog-service/pull/482#discussion_r2"
+        }
+      ]
+    },
+    {
+      "id": "PRRT_stale",
+      "isResolved": false,
+      "isOutdated": true,
+      "isCollapsed": false,
+      "resolvedBy": null,
+      "subjectType": "LINE",
+      "filePath": "src/utils/formatDate.js",
+      "side": "RIGHT",
+      "line": null,
+      "startLine": null,
+      "originalLine": 99,
+      "originalStartLine": null,
+      "commentsOmitted": 0,
+      "url": "https://github.com/acme/catalog-service/pull/482#discussion_r7",
+      "comments": [
+        {
+          "id": "PRRC_7",
+          "author": "dave",
+          "authorAssociation": "MEMBER",
+          "body": "This helper looks unused now.",
+          "bodyTruncated": false,
+          "createdAt": "2026-08-20T12:00:00Z",
+          "url": "https://github.com/acme/catalog-service/pull/482#discussion_r7"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_1",
+      "author": "alice",
+      "state": "CHANGES_REQUESTED",
+      "body": "Two things to sort out before this lands, see inline.",
+      "bodyTruncated": false,
+      "submittedAt": "2026-08-20T12:05:00Z",
+      "url": "https://github.com/acme/catalog-service/pull/482#pullrequestreview-1"
+    }
+  ],
+  "issueComments": [
+    {
+      "id": "IC_1",
+      "author": "dave",
+      "authorAssociation": "MEMBER",
+      "body": "Heads up: this touches the same code as #470.",
+      "bodyTruncated": false,
+      "createdAt": "2026-08-20T12:00:00Z",
+      "url": "https://github.com/acme/catalog-service/pull/482#issuecomment-9"
+    }
+  ]
+}
+```
+
+The first thread anchors inline at line 13. The second has `line: null` and
+`isOutdated: true`, so it renders in the activity panel with its historical position
+shown as context, and stays expanded because it is still unresolved.
 
 ---
 

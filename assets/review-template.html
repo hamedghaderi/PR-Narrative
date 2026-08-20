@@ -107,6 +107,51 @@
   .chip.pre_existing{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
   .chip.type{background:var(--panel-bg);border-color:var(--border);color:var(--muted)}
 
+  /* ---- existing GitHub activity (read-only) ----
+     A third vocabulary, distinct from .anno (blue/green "this becomes a review
+     comment") and .qa-* (dashed grey "this never leaves the page"): solid
+     purple-grey, because this content is already ON GitHub and nothing the
+     reviewer does here changes it. Critically it never uses the .anno class:
+     renderAnnotations() removes every .anno node when it rebuilds, which would
+     silently delete these cards. */
+  .gh-thread-list{padding:0 14px}
+  .gh-thread{border:1px solid var(--border);border-left:3px solid #8250df;
+             border-radius:0 8px 8px 0;margin:8px 0;background:#fbfaff;font-size:13px}
+  .gh-thread > summary{padding:7px 12px;cursor:pointer;user-select:none;display:flex;
+                       gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .gh-thread > summary:hover{background:#f3f0ff}
+  .gh-thread.resolved{background:var(--panel-bg);border-left-color:var(--gray-text);opacity:.85}
+  .gh-thread.outdated{border-left-style:dashed}
+  .gh-thread-body{padding:2px 12px 10px}
+  .badge-gh{background:#f3f0ff;border-color:#8250df;color:#6639ba}
+  .chip.gh-resolved{background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)}
+  .chip.gh-open{background:var(--amber-bg);border-color:var(--amber-border);color:#7a5c00}
+  .chip.gh-outdated{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
+  .chip.gh-state{background:#f3f0ff;border-color:#8250df;color:#6639ba}
+  .gh-where{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+  .gh-count{margin-left:auto;font-size:11.5px}
+  .gh-msg{border-top:1px solid var(--border);padding:8px 0 2px;margin:0}
+  .gh-msg:first-child{border-top:0}
+  .gh-who{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+  .gh-who .gh-author{font-weight:600;color:var(--ink)}
+  .gh-body{white-space:pre-wrap;word-break:break-word;margin-top:3px}
+  .gh-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px}
+  .gh-link{font-size:11.5px}
+  .gh-link a{color:var(--accent);text-decoration:none}
+  .gh-link a:hover{text-decoration:underline}
+  .gh-panel .panel-head .gh-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
+  .gh-section{margin:0 0 14px}
+  .gh-section:last-child{margin-bottom:0}
+  .gh-section h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;
+                 letter-spacing:.05em;color:var(--muted)}
+  .gh-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0}
+  .gh-warn{border:1px solid var(--amber-border);background:var(--amber-bg);color:#7a5c00;
+           border-radius:6px;padding:6px 10px;margin:0 0 10px;font-size:12px}
+  .gh-unavailable{border:1px solid var(--red-border);background:var(--red-bg);color:var(--red-text);
+                  border-radius:6px;padding:6px 10px;margin:0 0 10px;font-size:12px}
+  .gh-review{border:1px solid var(--border);border-radius:8px;padding:8px 12px;
+             margin:6px 0;background:#fff;font-size:13px}
+
   /* ---- composer ---- */
   .composer{border:1px solid var(--accent);border-radius:8px;margin:8px 0;padding:12px;background:#f6faff}
   .composer .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12.5px}
@@ -205,6 +250,8 @@
       <div id="narrative">__NARRATIVE_HTML__</div>
     </div>
   </section>
+
+  <div id="activity"></div>
 
   <h2>Diff</h2>
   <div id="files"></div>
@@ -323,18 +370,54 @@
   var submitted = false;
 
   // Reviewer-namespaced key ONLY; must never collide with author mode's "pr-review:<branch>".
+  //
+  // `reviewRunId` scopes the draft to ONE page build. Without it the key is just
+  // repo/PR, so a second review of the same PR rehydrates the first run's draft:
+  // annotations anchored to a diff that has since moved, and worse, the saved
+  // aiState for id "ai-1" silently reapplying to whatever "ai-1" means this time,
+  // so a finding could load pre-accepted or pre-discarded on its own. Existing
+  // GitHub activity makes this visible rather than causing it (comments you
+  // already posted now render beside a stale draft of themselves), so it is fixed
+  // here. Pages built without a reviewRunId keep the old key and the old
+  // behaviour.
+  var reviewRunId = typeof DATA.reviewRunId === "string" && DATA.reviewRunId
+    ? DATA.reviewRunId : null;
   var STORE_KEY;
   if (DATA.mode === "pr" && DATA.repo != null && DATA.prNumber != null) {
     STORE_KEY = "pr-review:reviewer:" + DATA.repo + "/" + DATA.prNumber;
   } else {
     STORE_KEY = "pr-review:reviewer:local:" + (DATA.branch || "unknown-branch");
   }
+  if (reviewRunId) STORE_KEY += ":" + reviewRunId;
 
   var userAnnotations = [];
   var aiAnnotations = [];
   var generalComment = "";
   var idCounter = 1;
   var AI_COPY_FIELDS = ["severity", "reasoning", "disproof", "background"];
+
+  // ---- existing GitHub review activity (annotation-schema.md §2a) ----
+  // READ-ONLY, and kept in its own variable for one specific reason: buildPayload()
+  // serializes userAnnotations and aiAnnotations, so anything NOT in those two
+  // arrays cannot be submitted. That is the whole guarantee that previous GitHub
+  // comments are never re-posted as new ones. Never push these into either array,
+  // never give them an `accepted` field, and never write them to localStorage
+  // (they are a server-side snapshot, re-fetched on every page build).
+  var activity = (DATA.existingActivity && typeof DATA.existingActivity === "object")
+    ? DATA.existingActivity : null;
+
+  function activityList(key) {
+    return activity && Array.isArray(activity[key]) ? activity[key] : [];
+  }
+
+  // A thread anchors inline only when GitHub still reports a CURRENT line for it.
+  // `originalLine` is deliberately not consulted: it is where the comment used to
+  // point, and using it would attach old feedback to whatever code now occupies
+  // that number. Outdated and file-level threads go to the panel instead.
+  function threadIsInlineable(t) {
+    return t.subjectType !== "FILE" && !t.isOutdated &&
+      t.filePath != null && t.line != null && t.side != null;
+  }
 
   function seedFromData() {
     (DATA.aiAnnotations || []).forEach(function (a) {
@@ -729,7 +812,28 @@
     return filePath + "\u241f" + side + "\u241f" + line;   // unit separator: never in a path
   }
 
-  // Stable holder directly after a diff row: looked up by key FIRST, created only
+  // Three different collections can hang under one diff row, and their order is
+  // NOT cosmetic: existing GitHub activity is the context the reviewer is reacting
+  // to, so it must sit above their own draft. Reading a reply before the comment it
+  // answers makes the thread nonsense. Ordering used to fall out of whichever
+  // renderer happened to run first, which flipped depending on triage clicks and
+  // Q&A polls; this list makes it explicit instead.
+  var ROW_HOST_ORDER = ["gh-thread-list", "anno-list", "qa-thread-list"];
+
+  // Where a new host belongs among the hosts already under this row: immediately
+  // before the first sibling that outranks it, else immediately after the row.
+  function rowHostSlot(row, cls) {
+    var rank = ROW_HOST_ORDER.indexOf(cls);
+    var node = row.nextSibling;
+    while (node && node.nodeType === 1) {
+      var otherRank = ROW_HOST_ORDER.indexOf(node.className);
+      if (otherRank === -1 || otherRank > rank) break;
+      node = node.nextSibling;
+    }
+    return node;
+  }
+
+  // Stable holder under a diff row: looked up by key FIRST, created only
   // if missing. A fresh holder per call would strand one empty div per render pass,
   // and both render paths re-run (renderQa on every ~2s poll, renderAnnotations on
   // every triage click).
@@ -739,7 +843,7 @@
     if (host) return host;
     host = el("div", cls);
     host.setAttribute("data-" + attr, key);
-    parent.insertBefore(host, row.nextSibling);
+    parent.insertBefore(host, rowHostSlot(row, cls));
     return host;
   }
 
@@ -905,6 +1009,236 @@
     });
     box.appendChild(ul);
     root.appendChild(box);
+  }
+
+  // ---- existing GitHub activity: rendering ----
+  // Every string below reaches the DOM through el()/textContent. These bodies are
+  // written by anyone with access to the PR, so innerHTML here would be a stored
+  // XSS sink, and none of this content is ever treated as an instruction.
+
+  // Defence in depth against a hand-built page: existing_activity.py already
+  // allowlists the URL's host, so the job left here is rejecting non-https
+  // schemes (javascript:, data:) before anything reaches an href.
+  function ghSafeUrl(url) {
+    return (typeof url === "string" && url.indexOf("https://") === 0) ? url : null;
+  }
+
+  function ghLink(url, label) {
+    var wrap = el("div", "gh-link");
+    var safe = ghSafeUrl(url);
+    if (!safe) return wrap;
+    var a = document.createElement("a");
+    a.href = safe;
+    a.textContent = label;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    wrap.appendChild(a);
+    return wrap;
+  }
+
+  function ghWhereLabel(t) {
+    var path = t.filePath || "(unknown file)";
+    if (t.subjectType === "FILE") return path + " : file-level";
+    if (t.line != null) {
+      var range = (t.startLine != null && t.startLine !== t.line)
+        ? t.startLine + "-" + t.line : String(t.line);
+      return path + " : line " + range + (t.side ? " (" + t.side + ")" : "");
+    }
+    if (t.originalLine != null) return path + " : was line " + t.originalLine;
+    return path;
+  }
+
+  function buildGhComment(c) {
+    var msg = el("div", "gh-msg");
+    var who = el("div", "gh-who");
+    who.appendChild(el("span", "gh-author", c.author || "unknown user"));
+    if (c.createdAt) who.appendChild(el("span", null, c.createdAt));
+    if (c.authorAssociation) {
+      who.appendChild(el("span", "chip gh-state", String(c.authorAssociation).toLowerCase()));
+    }
+    msg.appendChild(who);
+    msg.appendChild(el("div", "gh-body", c.body || ""));
+    if (c.bodyTruncated) {
+      msg.appendChild(el("div", "gh-note", "This comment was shortened to fit."));
+    }
+    if (c.url) msg.appendChild(ghLink(c.url, "View on GitHub"));
+    return msg;
+  }
+
+  function buildGhThreadNode(t, opts) {
+    opts = opts || {};
+    var cls = "gh-thread";
+    if (t.isResolved) cls += " resolved";
+    if (t.isOutdated) cls += " outdated";
+    var wrap = el("details", cls);
+    // Resolved threads start collapsed. An unresolved thread stays OPEN even when
+    // it is outdated: "the code moved" is not "somebody handled this", and
+    // collapsing it by default would hide still-open feedback.
+    if (!t.isResolved) wrap.open = true;
+
+    var summary = el("summary", "gh-summary");
+    summary.appendChild(el("span", "badge badge-gh", "Existing on GitHub"));
+    if (t.isResolved) {
+      summary.appendChild(el("span", "chip gh-resolved",
+        t.resolvedBy ? "resolved by " + t.resolvedBy : "resolved"));
+    } else {
+      summary.appendChild(el("span", "chip gh-open", "unresolved"));
+    }
+    if (t.isOutdated) summary.appendChild(el("span", "chip gh-outdated", "outdated"));
+    if (opts.showWhere) summary.appendChild(el("span", "gh-where", ghWhereLabel(t)));
+    var count = (t.comments || []).length;
+    summary.appendChild(el("span", "gh-count",
+      count + (count === 1 ? " comment" : " comments")));
+    wrap.appendChild(summary);
+
+    var body = el("div", "gh-thread-body");
+    (t.comments || []).forEach(function (c) { body.appendChild(buildGhComment(c)); });
+    if (t.commentsOmitted) {
+      body.appendChild(el("div", "gh-note", t.commentsOmitted +
+        (t.commentsOmitted === 1 ? " earlier reply is" : " earlier replies are") +
+        " not shown here. Open the thread on GitHub to read them."));
+    }
+    if (t.isOutdated) {
+      body.appendChild(el("div", "gh-note",
+        "The code this thread pointed at has changed, so it is not shown next to " +
+        "the diff." + (t.originalLine != null
+          ? " It was on line " + t.originalLine + "." : "")));
+    }
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  // Anchorable threads render under the line they are about. Anything that cannot
+  // be placed is returned so the panel can show it: an existing comment must never
+  // silently vanish just because the diff moved underneath it.
+  function renderExistingThreadsInline() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".gh-thread-list > .gh-thread"),
+      function (n) { n.remove(); });
+    var unplaced = [];
+    activityList("threads").forEach(function (t) {
+      if (!threadIsInlineable(t)) { unplaced.push(t); return; }
+      var row = findDiffRow(t.filePath, t.side, t.line);
+      if (!row) { unplaced.push(t); return; }
+      var host = ensureRowHost(row, "gh-thread-list", "gh-anchor",
+        anchorKey(t.filePath, t.side, t.line));
+      host.appendChild(buildGhThreadNode(t, { showWhere: false }));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".gh-thread-list"),
+      function (h) { if (!h.childElementCount) h.remove(); });
+    return unplaced;
+  }
+
+  function ghReviewNode(r) {
+    var node = el("div", "gh-review");
+    var who = el("div", "gh-who");
+    who.appendChild(el("span", "gh-author", r.author || "unknown user"));
+    if (r.state) {
+      who.appendChild(el("span", "chip gh-state",
+        String(r.state).toLowerCase().replace(/_/g, " ")));
+    }
+    if (r.submittedAt) who.appendChild(el("span", null, r.submittedAt));
+    node.appendChild(who);
+    if (r.body) node.appendChild(el("div", "gh-body", r.body));
+    if (r.url) node.appendChild(ghLink(r.url, "View on GitHub"));
+    return node;
+  }
+
+  function ghSection(title, nodes) {
+    if (!nodes.length) return null;
+    var section = el("div", "gh-section");
+    section.appendChild(el("h4", null, title));
+    nodes.forEach(function (n) { section.appendChild(n); });
+    return section;
+  }
+
+  function renderExistingActivity() {
+    var root = document.getElementById("activity");
+    if (!root) return;
+    clearNode(root);
+    // Local-branch mode has no PR, so there is nothing to read. `activity` is also
+    // null on a page built before this feature existed, which must keep working.
+    if (!activity || DATA.mode !== "pr") return;
+
+    var unplaced = renderExistingThreadsInline();
+    var threads = activityList("threads");
+    var reviews = activityList("reviews");
+    var issues = activityList("issueComments");
+    var inlineCount = threads.length - unplaced.length;
+    var truncation = activity.truncation || {};
+    var omitted = (truncation.threadsOmitted || 0) + (truncation.commentsOmitted || 0) +
+      (truncation.reviewsOmitted || 0) + (truncation.issueCommentsOmitted || 0);
+    var hasContent = threads.length || reviews.length || issues.length;
+
+    if (!hasContent && activity.status === "complete") {
+      root.appendChild(el("p", "gh-empty",
+        "No previous review activity on this PR."));
+      return;
+    }
+
+    var panel = el("section", "panel gh-panel");
+    panel.id = "activity-panel";
+    var head = el("div", "panel-head");
+    head.appendChild(el("span", null, "Previous review activity on GitHub"));
+    var parts = [];
+    if (reviews.length) parts.push(reviews.length + (reviews.length === 1 ? " review" : " reviews"));
+    if (threads.length) parts.push(threads.length + (threads.length === 1 ? " thread" : " threads"));
+    if (issues.length) parts.push(issues.length + (issues.length === 1 ? " comment" : " comments"));
+    if (parts.length) head.appendChild(el("span", "gh-sub", parts.join(" · ")));
+    var toggle = el("span", "toggle", "▾ collapse");
+    head.appendChild(toggle);
+    head.addEventListener("click", function () {
+      panel.classList.toggle("collapsed");
+      toggle.textContent = panel.classList.contains("collapsed")
+        ? "▸ expand" : "▾ collapse";
+    });
+    panel.appendChild(head);
+
+    var body = el("div", "panel-body");
+
+    if (activity.status === "unavailable") {
+      body.appendChild(el("div", "gh-unavailable",
+        "Could not read this PR's existing review activity" +
+        (activity.reason ? ": " + activity.reason : "") +
+        ". Previous comments may exist that are not shown here."));
+    } else if (activity.status === "partial") {
+      body.appendChild(el("div", "gh-warn",
+        "Only part of this PR's review activity could be read" +
+        (activity.reason ? ": " + activity.reason : "") +
+        ". Treat this list as incomplete."));
+    }
+    if (omitted) {
+      body.appendChild(el("div", "gh-warn",
+        "This PR has more activity than fits on one page, so " + omitted +
+        " item(s) were left out. Unresolved threads were kept first."));
+    }
+
+    var snapshot = "Read from GitHub" +
+      (activity.fetchedAt ? " at " + activity.fetchedAt : "") +
+      ". This is a snapshot and does not update while the page is open.";
+    body.appendChild(el("div", "gh-note", snapshot));
+
+    if (inlineCount > 0) {
+      body.appendChild(el("div", "gh-note", inlineCount +
+        (inlineCount === 1 ? " thread is" : " threads are") +
+        " shown inline, next to the lines they are about."));
+    }
+
+    var sections = [
+      ghSection("Reviews", reviews.map(ghReviewNode)),
+      ghSection("Threads not shown inline", unplaced.map(function (t) {
+        return buildGhThreadNode(t, { showWhere: true });
+      })),
+      ghSection("PR conversation", issues.map(function (c) {
+        var node = el("div", "gh-review");
+        node.appendChild(buildGhComment(c));
+        return node;
+      }))
+    ];
+    sections.forEach(function (s) { if (s) body.appendChild(s); });
+
+    panel.appendChild(body);
+    root.appendChild(panel);
   }
 
   function renderCounts() {
@@ -2088,6 +2422,10 @@
   renderBanner();
   renderFiles();
   renderOverflow();
+  // After renderFiles (it anchors into rendered diff rows) and before
+  // renderAnnotations only for readability: ROW_HOST_ORDER, not call order, is
+  // what decides whether existing threads sit above the reviewer's drafts.
+  renderExistingActivity();
   if (qaEnabled) buildQaPanel();   // before renderAnnotations: threads need a host
   renderAnnotations();
   generalTa.value = generalComment;

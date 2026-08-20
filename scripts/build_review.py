@@ -27,6 +27,12 @@ import diff_anchor
 MAX_BODY = 65535
 TRUNCATE_SUFFIX = "\n[truncated]"
 SUGGESTION_FENCE = "```suggestion"
+# The only two origins that may become a GitHub comment. This is an allowlist,
+# not a blocklist, so a future page-data collection (existingActivity's GitHub
+# threads being the first) cannot become postable by accident: anything whose
+# origin this builder does not recognize is dropped with a warning instead of
+# being echoed back to the PR as if the reviewer had written it.
+POSTABLE_ORIGINS = ("user", "ai")
 # Must stay byte-identical to DISPROOF_LABEL in assets/review-template.html.
 DISPROOF_LABEL = "**Smallest check that would prove this wrong:**"
 
@@ -169,6 +175,14 @@ def build_payload(annotations, files, commit_id, body=""):
 
     for ann in annotations:
         if not ann.get("accepted"):
+            continue
+
+        origin = ann.get("origin")
+        if origin not in POSTABLE_ORIGINS:
+            warnings.append(
+                "dropped annotation %s: origin %r is not postable (expected one "
+                "of %s); read-only GitHub activity is never re-posted"
+                % (ann.get("id"), origin, ", ".join(POSTABLE_ORIGINS)))
             continue
 
         scope = ann.get("scope")

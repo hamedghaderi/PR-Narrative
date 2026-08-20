@@ -55,6 +55,12 @@ diff_json = {
     "files": body["files"],
     "overflowFiles": body["overflowFiles"],
     "aiAnnotations": [],                # filled in step 2 below
+    # PR mode only. json.load the output of scripts/existing_activity.py here
+    # (references/github-posting.md §3a). Leave it null in local mode: there is no
+    # PR, so there is no posted history to read.
+    "existingActivity": None,
+    # One token per page build, so a draft cannot leak across review runs.
+    "reviewRunId": os.environ.get("REVIEW_RUN_ID") or None,
 }
 
 # Live Q&A only: the agent exports SESSION_NONCE in the parent bash shell before
@@ -74,6 +80,53 @@ PYEOF
 > `os.environ.get("SESSION_NONCE")` above reads it correctly. The same value must be
 > passed to `scripts/review_server.py --nonce` and used in the session directory name.
 > Omit the `export` (and therefore the `sessionNonce` field) when live Q&A is not in use.
+
+Generate `REVIEW_RUN_ID` in the same Bash call, before the heredoc, exactly like
+`SESSION_NONCE`:
+
+```bash
+export REVIEW_RUN_ID=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 12)
+```
+
+### 1a. Existing review activity (PR mode)
+
+In PR mode, fetch and normalize the PR's already-posted review history per
+`references/github-posting.md` §3a, then load it into `existingActivity`:
+
+```python
+diff_json["existingActivity"] = json.load(
+    open("/tmp/pr-{n}-activity-normalized.json"))
+```
+
+What the page then does with it, so you know what the reviewer will see:
+
+- A thread renders **inline, under the line it is about** only when it is a line
+  thread, not outdated, and its current `line` matches a rendered diff row.
+- Everything else (outdated threads, file-level threads, threads whose line is no
+  longer in the diff) renders in a **"Previous review activity on GitHub"** panel
+  above the diff, together with the review summaries and the PR conversation. Nothing
+  is dropped; an existing comment must never silently vanish.
+- Resolved threads render **collapsed**. Unresolved threads render **expanded even
+  when outdated**, because the code moving is not the same as somebody handling the
+  point.
+- Cards are labelled **"Existing on GitHub"** and are visually distinct (solid purple)
+  from the reviewer's own drafts and from AI drafts. Where both sit on one line,
+  existing activity is always ordered **above** the draft: it is the context being
+  reacted to, and a reply above the comment it answers reads as nonsense.
+- The panel states when the snapshot was taken and that it does **not** update while
+  the page is open, plus any `partial`/`unavailable` status and anything the caps
+  trimmed.
+
+Two things this feature deliberately does **not** do:
+
+1. **It changes nothing about submission.** Existing activity is read-only and cannot
+   be edited, accepted, discarded, or replied to. It never enters the submitted
+   `annotations` array (`references/annotation-schema.md` §2a).
+2. **It does not suppress AI findings.** If an existing thread already raises the same
+   concern as an AI draft, both render and the reviewer decides. Letting
+   attacker-controlled comment text cancel a finding the diff supports would
+   contradict §2's rule that prose carries zero evidential weight, so the pre-seed
+   policy in §2 is unchanged by this feature.
 
 `narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story). Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`

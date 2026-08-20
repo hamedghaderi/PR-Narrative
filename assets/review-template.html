@@ -124,12 +124,20 @@
      every Q&A surface is grey/dashed and carries its own label. Same tokens,
      different voice. */
   .qa-panel .panel-head .qa-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
+  .qa-status-block{margin:0 0 18px}
   .qa-status-line{font-size:12.5px;color:var(--muted);margin:0 0 8px}
-  .qa-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0}
+  .qa-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0 0 8px}
+  /* Host for inline line-range threads: sits between two .diff-line rows, so it
+     borrows .anno-list's gutter to line up with annotation cards on the same row. */
+  .qa-thread-list{padding:0 14px}
   .qa-thread{border-left:3px dashed var(--gray-text);background:var(--panel-bg);
              border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0}
   .qa-thread .qa-target{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
                         font-size:11.5px;color:var(--muted);margin-bottom:6px}
+  /* Inline threads have no panel subtitle above them to say "this never ships",
+     so each one carries the same promise in one quiet line. It repeats down the
+     diff, so it stays lowercase and unboxed. */
+  .qa-thread .qa-note{font-size:11px;color:var(--muted);margin-bottom:4px}
   .qa-msg{margin:6px 0;font-size:12.5px}
   .qa-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;
             letter-spacing:.05em;color:var(--muted)}
@@ -296,7 +304,9 @@
   var qaState = "active";          // "active" | "ended" (server gone) | "stale" (409)
   var qaPollTimer = null;
   var qaPollFailures = 0;
+  var qaPanel = null;              // fallback host for threads that cannot be anchored
   var qaPanelBody = null;
+  var qaStatusHost = null;         // session status/notices, independent of that panel
   var submitted = false;
 
   // Reviewer-namespaced key ONLY; must never collide with author mode's "pr-review:<branch>".
@@ -683,20 +693,51 @@
     if (container) container.appendChild(node);
   }
 
+  // ---- shared line anchoring ----
+  // ONE row lookup behind every "put this under line N of file F" placement:
+  // annotation cards, inline Q&A threads, and the unanchored-warning count. Kept
+  // in one place so the three can never disagree about what "anchorable" means.
+  function findFileBlock(filePath) {
+    if (!filePath) return null;
+    return filesRoot.querySelector('.file-block[data-file="' + cssEscape(filePath) + '"]');
+  }
+
+  function findDiffRow(filePath, side, line) {
+    var block = findFileBlock(filePath);
+    if (!block || line == null) return null;
+    var rows = block.querySelectorAll('.diff-line[data-side="' + side + '"]');
+    for (var i = 0; i < rows.length; i++) {
+      if (parseInt(rows[i].dataset.line, 10) === line) return rows[i];
+    }
+    return null;
+  }
+
+  function anchorKey(filePath, side, line) {
+    return filePath + "\u241f" + side + "\u241f" + line;   // unit separator: never in a path
+  }
+
+  // Stable holder directly after a diff row: looked up by key FIRST, created only
+  // if missing. A fresh holder per call would strand one empty div per render pass,
+  // and both render paths re-run (renderQa on every ~2s poll, renderAnnotations on
+  // every triage click).
+  function ensureRowHost(row, cls, attr, key) {
+    var parent = row.parentNode;
+    var host = parent.querySelector("." + cls + "[data-" + attr + '="' + cssEscape(key) + '"]');
+    if (host) return host;
+    host = el("div", cls);
+    host.setAttribute("data-" + attr, key);
+    parent.insertBefore(host, row.nextSibling);
+    return host;
+  }
+
   function findAnnoContainer(a) {
-    if (!a.filePath) return null;
-    var block = filesRoot.querySelector('.file-block[data-file="' + cssEscape(a.filePath) + '"]');
+    var block = findFileBlock(a.filePath);
     if (!block) return null;
     if (a.scope === "line" && a.lineStart != null) {
-      var rows = block.querySelectorAll('.diff-line[data-side="' + a.side + '"]');
-      var target = null;
-      for (var i = 0; i < rows.length; i++) {
-        if (parseInt(rows[i].dataset.line, 10) === a.lineEnd) { target = rows[i]; break; }
-      }
-      if (target) {
-        var holder = el("div", "anno-list");
-        target.parentNode.insertBefore(holder, target.nextSibling);
-        return holder;
+      var row = findDiffRow(a.filePath, a.side, a.lineEnd);
+      if (row) {
+        return ensureRowHost(row, "anno-list", "line-anchor",
+          anchorKey(a.filePath, a.side, a.lineEnd));
       }
     }
     return block.querySelector('.anno-list[data-file-anchor="' + cssEscape(a.filePath) + '"]');
@@ -868,14 +909,7 @@
     var n = 0;
     all.forEach(function (a) {
       if (a.scope !== "line" || a.filePath == null) return;
-      var block = filesRoot.querySelector('.file-block[data-file="' + cssEscape(a.filePath) + '"]');
-      if (!block) { n++; return; }
-      var rows = block.querySelectorAll('.diff-line[data-side="' + a.side + '"]');
-      var found = false;
-      for (var i = 0; i < rows.length; i++) {
-        if (parseInt(rows[i].dataset.line, 10) === a.lineEnd) { found = true; break; }
-      }
-      if (!found) n++;
+      if (!findDiffRow(a.filePath, a.side, a.lineEnd)) n++;
     });
     return n;
   }
@@ -1294,6 +1328,10 @@
       var chainTarget = list.length ? list[0].target : null;
       wrap.appendChild(el("div", "qa-target", targetLabel(chainTarget)));
     }
+    if (opts && opts.note) wrap.appendChild(el("div", "qa-note", opts.note));
+    // Follow-ups open in the host, not inside this wrap: a re-render rebuilds every
+    // wrap, and a composer parented to one would be destroyed mid-typing.
+    var composerHost = (opts && opts.composerHost) ? opts.composerHost : wrap;
     var chain = list.filter(function (q) { return q.threadId === threadId; });
     chain.forEach(function (q, i) {
       wrap.appendChild(buildQuestionNode(q));
@@ -1305,7 +1343,7 @@
           followBtn.addEventListener("click", function () {
             openQaComposer({
               target: q.target, threadId: threadId, parentQid: q.qid,
-              container: wrap, label: "Follow up on this thread",
+              container: composerHost, label: "Follow up on this thread",
               afterClose: function () { renderQa(); }
             });
           });
@@ -1343,67 +1381,125 @@
     });
   }
 
-  // Line-range questions get their own panel above the sticky footer: they are not
-  // annotations, they will never be submitted, and mixing them into .anno-list would
-  // read exactly like a comment that ships.
-  function buildQaPanel() {
-    if (!qaEnabled) return;
-    var panel = el("section", "panel qa-panel");
-    panel.id = "qa-panel";
-    var head = el("div", "panel-head");
-    head.appendChild(el("span", null, "Questions to the agent"));
-    head.appendChild(el("span", "qa-sub", "not part of your review · never posted to GitHub"));
-    head.appendChild(el("span", "toggle", "▾ collapse"));
-    head.addEventListener("click", function () {
-      panel.classList.toggle("collapsed");
-      head.querySelector(".toggle").textContent =
-        panel.classList.contains("collapsed") ? "▸ expand" : "▾ collapse";
-    });
-    panel.appendChild(head);
-    qaPanelBody = el("div", "panel-body");
-    panel.appendChild(qaPanelBody);
-    document.querySelector(".wrap").appendChild(panel);
+  // The one line that keeps an inline thread from reading like a review comment.
+  // The dashed grey vocabulary carries most of it; this says it out loud.
+  var QA_INLINE_NOTE = "question to the agent · not part of your review";
+
+  function lineQuestions() {
+    return qaQuestions.filter(function (q) { return q.target && q.target.type === "lines"; });
   }
 
-  function renderQuestionsPanel() {
-    if (!qaEnabled || !qaPanelBody) return;
-    // Detach (not destroy) an open composer so its typed text survives a re-render.
-    var keep = qaPanelBody.querySelector(".qa-composer");
-    if (keep) keep.remove();
-    clearNode(qaPanelBody);
+  // A line question is anchorable when its file block is rendered AND a .diff-line
+  // row for its lineEnd/side exists. Anchorable → the thread renders inline, in the
+  // slot the composer occupied, next to the code it is about. Un-anchorable (the
+  // file went to overflowFiles, or the line falls outside every rendered hunk) →
+  // the fallback panel, so a Q&A pair can never silently vanish.
+  // Returns the thread ids that could not be placed.
+  function renderLineThreads(list) {
+    // These threads are siblings of .diff-line rows, NOT children of .anno cards,
+    // so renderAnnotations() does not clear them and nothing else will: this pass
+    // owns their whole lifetime. Rebuild from scratch every time, then drop hosts
+    // left holding nothing, so repeat calls converge instead of accumulating.
+    Array.prototype.forEach.call(document.querySelectorAll(".qa-thread-list > .qa-thread"),
+      function (n) { n.remove(); });
+    var unplaced = [];
+    threadIdsOf(list).forEach(function (tid) {
+      var chain = list.filter(function (q) { return q.threadId === tid; });
+      var t = chain.length ? chain[0].target : null;
+      var row = t ? findDiffRow(t.filePath, t.side, t.lineEnd) : null;
+      if (!row) { unplaced.push(tid); return; }
+      var host = ensureRowHost(row, "qa-thread-list", "qa-anchor",
+        anchorKey(t.filePath, t.side, t.lineEnd));
+      // No qa-target label: the thread is sitting on the lines it names.
+      var node = buildThreadNode(tid, list,
+        { showTarget: false, note: QA_INLINE_NOTE, composerHost: host });
+      var openComposerNode = host.querySelector(".qa-composer");
+      if (openComposerNode) host.insertBefore(node, openComposerNode);
+      else host.appendChild(node);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".qa-thread-list"),
+      function (h) { if (!h.childElementCount) h.remove(); });
+    return unplaced;
+  }
 
+  // Session-level state (terminal states, the pending lockout) used to live in the
+  // questions panel. That panel now hides itself whenever it is empty, so this
+  // moved out to stay visible on its own.
+  function buildQaStatusHost() {
+    qaStatusHost = el("div", "qa-status-block");
+    qaStatusHost.id = "qa-session-status";
+    qaStatusHost.style.display = "none";
+    var banner = document.getElementById("mode-banner");
+    banner.parentNode.insertBefore(qaStatusHost, banner.nextSibling);
+  }
+
+  function renderQaStatus() {
+    if (!qaStatusHost) return;
+    clearNode(qaStatusHost);
     var pending = pendingQuestions().length;
-    var status = el("div", "qa-status-line",
-      qaQuestions.length + " question" + (qaQuestions.length === 1 ? "" : "s") +
-      " asked · " + pending + " waiting");
-    qaPanelBody.appendChild(status);
-
+    if (qaQuestions.length) {
+      qaStatusHost.appendChild(el("div", "qa-status-line",
+        qaQuestions.length + " question" + (qaQuestions.length === 1 ? "" : "s") +
+        " asked · " + pending + " waiting"));
+    }
     if (qaState === "stale") {
-      qaPanelBody.appendChild(el("div", "qa-notice",
+      qaStatusHost.appendChild(el("div", "qa-notice",
         "Stale session. This page was opened for an earlier review run, so the server " +
         "refused it. Asking is disabled. Use \u201cDownload annotations\u201d to save your review."));
     } else if (qaState === "ended") {
-      qaPanelBody.appendChild(el("div", "qa-notice",
+      qaStatusHost.appendChild(el("div", "qa-notice",
         "Session ended. The review server stopped responding (timeout, submit elsewhere, " +
         "or crash). Asking is disabled and answers will no longer arrive. Your annotations " +
         "are intact - use \u201cDownload annotations\u201d to hand them back."));
     } else if (pending >= MAX_PENDING) {
-      qaPanelBody.appendChild(el("div", "qa-notice",
+      qaStatusHost.appendChild(el("div", "qa-notice",
         "Waiting on " + MAX_PENDING + " questions. Asking is paused until one is answered."));
     }
+    qaStatusHost.style.display = qaStatusHost.childElementCount ? "" : "none";
+  }
 
-    var lineQuestions = qaQuestions.filter(function (q) {
-      return q.target && q.target.type === "lines";
+  // Fallback host only: threads whose lines are not on this page. Empty is the
+  // normal case, and an empty panel would just be a scrap of UI to scroll past.
+  function buildQaPanel() {
+    if (!qaEnabled) return;
+    buildQaStatusHost();
+    qaPanel = el("section", "panel qa-panel");
+    qaPanel.id = "qa-panel";
+    qaPanel.style.display = "none";
+    var head = el("div", "panel-head");
+    head.appendChild(el("span", null, "Questions the diff can't show"));
+    head.appendChild(el("span", "qa-sub", "not part of your review · never posted to GitHub"));
+    head.appendChild(el("span", "toggle", "▾ collapse"));
+    head.addEventListener("click", function () {
+      qaPanel.classList.toggle("collapsed");
+      head.querySelector(".toggle").textContent =
+        qaPanel.classList.contains("collapsed") ? "▸ expand" : "▾ collapse";
     });
-    if (!lineQuestions.length) {
-      qaPanelBody.appendChild(el("p", "qa-empty",
-        "Select lines in the diff and choose \u201cAsk about this\u201d to ask the agent about them. " +
-        "Questions about a finding appear under its card."));
-    } else {
-      threadIdsOf(lineQuestions).forEach(function (tid) {
-        qaPanelBody.appendChild(buildThreadNode(tid, lineQuestions, { showTarget: true }));
-      });
+    qaPanel.appendChild(head);
+    qaPanelBody = el("div", "panel-body");
+    qaPanel.appendChild(qaPanelBody);
+    document.querySelector(".wrap").appendChild(qaPanel);
+  }
+
+  function renderFallbackPanel(unplaced, list) {
+    if (!qaEnabled || !qaPanel || !qaPanelBody) return;
+    // Detach (not destroy) an open composer so its typed text survives a re-render.
+    var keep = qaPanelBody.querySelector(".qa-composer");
+    if (keep) keep.remove();
+    clearNode(qaPanelBody);
+    if (!unplaced.length && !keep) {
+      qaPanel.style.display = "none";
+      return;
     }
+    qaPanel.style.display = "";
+    qaPanelBody.appendChild(el("p", "qa-empty",
+      "These questions point at lines this page does not render - the file is in the " +
+      "overflow list, or the line falls outside every hunk shown - so they cannot sit " +
+      "next to the code."));
+    unplaced.forEach(function (tid) {
+      qaPanelBody.appendChild(buildThreadNode(tid, list,
+        { showTarget: true, composerHost: qaPanelBody }));
+    });
     if (keep) qaPanelBody.appendChild(keep);
   }
 
@@ -1419,7 +1515,9 @@
   function renderQa() {
     if (!qaEnabled) return;
     renderAnnotationThreads();
-    renderQuestionsPanel();
+    var lines = lineQuestions();
+    renderFallbackPanel(renderLineThreads(lines), lines);
+    renderQaStatus();
     updateAskAvailability();
   }
 

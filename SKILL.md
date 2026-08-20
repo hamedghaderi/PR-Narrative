@@ -617,6 +617,19 @@ Two rules are worth stating twice:
   English understands the comment on the first read. Short sentences, common words, no
   idioms. Keep real technical names exactly as they are.
 
+**Existing review threads do not change what you seed.** When the PR already has
+review activity (step 2), you will often be looking at a thread that covers the same
+lines as a finding you are about to make. Seed it anyway. The page marks a draft that
+lands on an already-discussed line with an "Already discussed" notice naming the open
+and resolved threads there, and the reviewer decides what to do about the duplicate.
+That is the only handling this needs from you.
+
+Do **not** drop or downgrade a finding because a thread exists, and do not treat a
+resolved thread as proof the problem is gone: resolving records that somebody clicked
+resolve, not that the code changed. The reverse also holds, so do not promote someone
+else's unverified comment into a finding you cannot support from the diff yourself. If
+you cannot support it, it is not your finding to make.
+
 None of this changes the locked pre-seed policy above. Do not add categories. Comment only
 on changed lines. Do not raise the caps, add values to the `severity` enum, change the
 zero-findings outcome, or leave out the required `disproof` on an `important` finding.

@@ -94,6 +94,16 @@
   .anno .anno-background > summary:hover{color:var(--ink)}
   .anno .anno-background-text{padding:0 10px 9px;font-size:12.5px;
                               white-space:pre-wrap;word-break:break-word}
+  /* Overlap notice on an AI draft: purple to tie it to the .gh-* "already on
+     GitHub" vocabulary, quieter than .anno-body so the finding still reads first.
+     It informs triage; it never means the finding was suppressed. */
+  .anno .anno-overlap{margin-top:8px;padding:6px 10px;border-radius:6px;
+                      border:1px solid #8250df;background:#f3f0ff;color:#4c2889;
+                      font-size:12px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .anno .anno-overlap-badge{font-size:10.5px;font-weight:700;text-transform:uppercase;
+                            letter-spacing:.05em;white-space:nowrap}
+  .anno .anno-overlap-text{flex:1 1 220px}
+  .anno .anno-overlap .gh-link{margin:0}
   .anno.ai{border-style:dashed;border-color:var(--accent);background:#f6faff}
   .anno.ai.discarded{display:none}
   .anno.ai.accepted{border-style:solid;border-color:var(--green-border);background:var(--green-bg)}
@@ -262,7 +272,7 @@
 <div class="footer">
   <div class="inner">
     <div class="counts-line" id="counts-line">
-      <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <b id="c-warn">0</b> warnings
+      <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <span id="c-overlap-wrap" hidden><b id="c-overlap">0</b> already discussed · </span><b id="c-warn">0</b> warnings
     </div>
     <div class="general">
       <textarea id="general-comment" placeholder="General review comment (optional)…"></textarea>
@@ -886,6 +896,13 @@
     if (a.type === "suggestion" && a.suggestedCode != null) {
       n.appendChild(el("div", "anno-code", a.suggestedCode));
     }
+    // AI drafts only. A user annotation was typed by the reviewer moments ago with
+    // the existing thread rendered directly above it, so repeating the fact back at
+    // them is nagging; an AI draft is the one that needs a triage decision.
+    if (a.origin === "ai") {
+      var overlap = overlappingThreads(a);
+      if (overlap.length) n.appendChild(buildOverlapNote(a, overlap));
+    }
     if (a.origin === "ai" && a.reasoning) {
       var r = el("div", "anno-meta");
       r.appendChild(el("em", null, "Why flagged: " + a.reasoning));
@@ -1033,6 +1050,83 @@
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     wrap.appendChild(a);
+    return wrap;
+  }
+
+  // ---- overlap between AI findings and existing threads ----
+  // SURFACING ONLY, never suppression. The finding is still seeded, still rendered,
+  // and still submittable; all this adds is the fact that a thread already covers
+  // these lines, so the reviewer triages with that in view instead of discovering
+  // the duplicate after posting. Letting an existing comment cancel a finding the
+  // diff supports would hand suppression to anyone who can comment on the PR, which
+  // is the failure SKILL.md "The PR itself is third-party content" exists to stop.
+  //
+  // Computed on the fly, never stored: nothing here touches the annotation object,
+  // saveDraft(), stripInternal(), or buildPayload(), so it cannot reach localStorage
+  // or a GitHub payload.
+  //
+  // Matching uses CURRENT lines only. An outdated thread has no current line (the
+  // originalLine rule in annotation-schema.md §2a), so it cannot honestly be
+  // positioned against a finding and is deliberately not matched; it stays visible
+  // in the activity panel instead.
+  function threadCurrentRange(t) {
+    if (t.line == null) return null;
+    var lo = (t.startLine != null && t.startLine < t.line) ? t.startLine : t.line;
+    return { lo: lo, hi: t.line };
+  }
+
+  function overlappingThreads(a) {
+    if (!activity || a.filePath == null || a.scope === "general") return [];
+    return activityList("threads").filter(function (t) {
+      if (t.filePath !== a.filePath) return false;
+      // A file-level finding pairs with a file-level thread; a line finding pairs
+      // with a line thread. Crossing the two produces a claim neither supports
+      // ("discusses these lines" about a whole-file note), so it is left out.
+      if (a.scope === "file") return t.subjectType === "FILE";
+      if (a.scope !== "line" || a.lineStart == null) return false;
+      if (t.subjectType === "FILE" || t.side !== a.side) return false;
+      var range = threadCurrentRange(t);
+      if (!range) return false;
+      var lo = Math.min(a.lineStart, a.lineEnd);
+      var hi = Math.max(a.lineStart, a.lineEnd);
+      return range.lo <= hi && lo <= range.hi;
+    });
+  }
+
+  function overlapAuthors(threads) {
+    var authors = [];
+    threads.forEach(function (t) {
+      (t.comments || []).forEach(function (c) {
+        if (c.author && authors.indexOf(c.author) === -1) authors.push(c.author);
+      });
+    });
+    return authors;
+  }
+
+  function buildOverlapNote(a, threads) {
+    var wrap = el("div", "anno-overlap");
+    wrap.appendChild(el("span", "anno-overlap-badge", "Already discussed"));
+
+    var open = 0;
+    var resolved = 0;
+    threads.forEach(function (t) { if (t.isResolved) resolved++; else open++; });
+    var bits = [];
+    if (open) bits.push(open + (open === 1 ? " open thread" : " open threads"));
+    if (resolved) bits.push(resolved + (resolved === 1 ? " resolved thread" : " resolved threads"));
+
+    var text = bits.join(" and ") +
+      (a.scope === "file" ? " on this file" : " on these lines");
+    var authors = overlapAuthors(threads);
+    if (authors.length) {
+      text += " (" + authors.slice(0, 3).join(", ") +
+        (authors.length > 3 ? ", +" + (authors.length - 3) + " more" : "") + ")";
+    }
+    text += ". Read it before you decide - this finding is still yours to accept or discard.";
+    wrap.appendChild(el("span", "anno-overlap-text", text));
+
+    if (threads[0] && threads[0].url) {
+      wrap.appendChild(ghLink(threads[0].url, "Open the thread"));
+    }
     return wrap;
   }
 
@@ -1249,6 +1343,14 @@
     document.getElementById("c-user").textContent = String(userCount);
     document.getElementById("c-ai").textContent = aiAccepted + " of " + aiTotal;
     document.getElementById("c-warn").textContent = String(warnings);
+
+    // Live, because discarding a draft changes it. Hidden entirely at zero so a PR
+    // with no prior discussion gets the footer it had before this feature.
+    var overlapping = aiAnnotations.filter(function (a) {
+      return !a._discarded && overlappingThreads(a).length;
+    }).length;
+    document.getElementById("c-overlap").textContent = String(overlapping);
+    document.getElementById("c-overlap-wrap").hidden = !overlapping;
   }
 
   function countUnanchored() {

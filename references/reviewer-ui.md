@@ -122,11 +122,26 @@ Two things this feature deliberately does **not** do:
 1. **It changes nothing about submission.** Existing activity is read-only and cannot
    be edited, accepted, discarded, or replied to. It never enters the submitted
    `annotations` array (`references/annotation-schema.md` §2a).
-2. **It does not suppress AI findings.** If an existing thread already raises the same
-   concern as an AI draft, both render and the reviewer decides. Letting
-   attacker-controlled comment text cancel a finding the diff supports would
-   contradict §2's rule that prose carries zero evidential weight, so the pre-seed
-   policy in §2 is unchanged by this feature.
+2. **It does not suppress AI findings; it surfaces the overlap.** Where an AI draft
+   lands on lines an existing thread already covers, the draft card carries an
+   "Already discussed" notice naming how many open and resolved threads are there and
+   who wrote them, and the footer shows a live count. The finding is still seeded,
+   still rendered, and still submittable: the reviewer reads the thread and decides.
+
+   Letting comment text cancel a finding the diff supports would hand suppression to
+   anyone who can comment on the PR, and it fails quietly (a clean page,
+   indistinguishable from a genuinely clean diff), so §2's pre-seed policy is
+   unchanged by this feature. The agent must not drop or downgrade a finding because
+   a thread exists, and must not treat a *resolved* thread as evidence: resolving
+   records that somebody clicked resolve, not that the code changed.
+
+   Matching uses **current** lines only. An outdated thread has no current line, so
+   it is not matched against a finding (anchoring on `originalLine` is forbidden for
+   the same reason); it stays visible in the panel. A line finding pairs only with a
+   line thread and a file-level finding only with a file-level thread, so the notice
+   never claims a whole-file note "discusses these lines". The overlap is computed in
+   the page on the fly and stored nowhere: it never reaches `localStorage`, the
+   submission payload, or GitHub.
 
 `narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story). Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`

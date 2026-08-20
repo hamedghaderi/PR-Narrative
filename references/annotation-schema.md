@@ -315,6 +315,14 @@ These objects carry **no** `accepted`, `origin`, `scope`, or `suggestedCode` fie
 purpose: those are annotation fields, and their absence is what makes an accidental
 merge into the annotation list fail loudly instead of silently posting.
 
+**Overlap with AI findings is derived, not stored.** Where an AI draft lands on lines a
+thread already covers, the page renders an "Already discussed" notice on that draft.
+It is computed from these same fields at render time and is not a field on either the
+annotation or the thread: nothing is written back onto an annotation, so it cannot
+reach `saveDraft()`, `stripInternal()`, `buildPayload()`, or GitHub. It is a display
+aid for triage and **never** suppresses, drops, or downgrades a finding; see
+`references/reviewer-ui.md` §1a for the rule and its rationale.
+
 ### Top level
 
 | Field | Type | Notes |

@@ -52,6 +52,14 @@ findings → **pending GitHub review**, or a local fix-list. With `python3`, the
 review server also supports in-page Q&A: the reviewer can ask follow-up questions
 and request background on AI callouts while the review is open.
 
+Those questions can be spoken instead of typed. A mic button in the Ask box dictates
+into the question field, and every answer carries a read-aloud button, so you can
+review a diff with your hands on the code. Speech input needs Chrome, Edge or Safari;
+Firefox doesn't ship it, and the mic button simply doesn't appear there. One caveat
+before you dictate anything about proprietary code: a browser's speech recognition may
+send the microphone audio to the vendor's own speech service to transcribe it, Chrome's
+does, while typing keeps the whole exchange local.
+
 The page puts the narrative up top and the real diff below it. Click a line to comment,
 drag across a few lines for a range, or leave a suggestion. AI-drafted callouts arrive
 unaccepted, so nothing reaches GitHub that you didn't keep. On Submit, your accepted

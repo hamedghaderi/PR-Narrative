@@ -667,6 +667,21 @@ questions arrive (emits `PR_REVIEW_QUESTIONS <qids>` and exits 0), then the agen
 answers and re-enters the same wait block in a later call against the same session
 without restarting the server.
 
+**Ask UI voice controls.** The composer's mic button is feature-detected on
+`window.SpeechRecognition || window.webkitSpeechRecognition` and is not created at
+all when neither exists, so a browser without speech input gets the same composer it
+gets today. Interaction is push-to-talk: click to start, click again to commit. The
+final transcript is appended to whatever the textarea already holds, never clobbering
+it, and the combined value is sliced to the same 4000-character limit `POST /ask`
+enforces. Recognition is aborted on every teardown path (composer cancel, successful
+send, composer close, session end), so no recognition session outlives the UI that
+started it. On the reply side, an answer to a dictated question auto-speaks
+best-effort only, because a browser may refuse `speechSynthesis.speak()` without a
+user gesture; the guaranteed path is a read-aloud button rendered on **every** answer,
+plus a stop-speaking control shown whenever something is playing. Nothing
+voice-related is persisted (no `localStorage`, per the ephemeral-Q&A rule), and the
+question and answer wire and file formats are unchanged.
+
 ## 4. After submit: PR mode
 
 `$OUT` is the raw `review-annotations` submission payload; it can be piped directly

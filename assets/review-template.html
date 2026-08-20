@@ -304,6 +304,12 @@
   // qids whose question text was dictated, in whole or in part. Client-side only:
   // the wire payload and the question files on disk are unchanged by dictation.
   var voiceQids = new Set();
+  // Speech-out state. It lives here, never in the DOM: renderQa() rebuilds every Q&A
+  // node on each poll tick, so anything parked in an element is lost every ~2s.
+  var speechQueue = [];            // pending chunks, FIFO, spoken one at a time
+  var speechUtterance = null;      // strong ref: a collected utterance stops mid-word
+  var speechSpeaking = false;      // "the queue is running", the Stop control's source
+  var speechRun = 0;               // bumped on cancel; stale end/error handlers no-op
   var qaCounter = 0;
   var qaState = "active";          // "active" | "ended" (server gone) | "stale" (409)
   var qaPollTimer = null;
@@ -1417,6 +1423,100 @@
     return "finding " + t.annotationId;
   }
 
+  // ---- speaking answers (speechSynthesis) ----
+
+  // MDN caps one utterance at 32,767 chars, and Chrome can stall on a long one after
+  // ~15s, so answers are split into chunks and chained.
+  var SPEECH_CHUNK_CHARS = 2000;
+
+  // Deliberately not a markdown parser: the only goal is to keep the two things that
+  // are actively hostile to listen to - code blocks and URLs - out of the audio, and
+  // to hand back pieces small enough to survive the chunk cap. Prose is spoken as
+  // written; the rendered text path is untouched.
+  function toSpeechText(body) {
+    if (typeof body !== "string") return [];
+    var text = body
+      .replace(/```[\s\S]*?```/g, " ")     // fenced code blocks
+      .replace(/```[\s\S]*$/, " ")         // an unclosed fence: drop its tail too
+      .replace(/`+/g, " ")                 // inline backticks
+      .replace(/\bhttps?:\/\/\S+/gi, " ")  // URLs, unreadable when spelled out loud
+      .replace(/\bwww\.\S+/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return [];
+    var chunks = [];
+    var current = "";
+    (text.match(/[^.!?]+[.!?]*\s*/g) || [text]).forEach(function (raw) {
+      var piece = raw.trim();
+      if (!piece) return;
+      if (!current) current = piece;
+      else if (current.length + 1 + piece.length <= SPEECH_CHUNK_CHARS) current += " " + piece;
+      else { chunks.push(current); current = piece; }
+    });
+    if (current) chunks.push(current);
+    // One sentence longer than the cap still has to break somewhere: at a space.
+    var out = [];
+    chunks.forEach(function (chunk) {
+      while (chunk.length > SPEECH_CHUNK_CHARS) {
+        var cut = chunk.lastIndexOf(" ", SPEECH_CHUNK_CHARS);
+        if (cut <= 0) cut = SPEECH_CHUNK_CHARS;
+        out.push(chunk.slice(0, cut));
+        chunk = chunk.slice(cut).replace(/^\s+/, "");
+      }
+      if (chunk) out.push(chunk);
+    });
+    return out;
+  }
+
+  function speechSupported() {
+    return !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  }
+
+  function stopSpeaking() {
+    speechQueue.length = 0;
+    speechUtterance = null;
+    speechSpeaking = false;
+    speechRun += 1;   // whatever the cancelled utterance fires next is now stale
+    if (!window.speechSynthesis) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+
+  function speakNext() {
+    if (!speechSupported()) { stopSpeaking(); return; }
+    var text = speechQueue.shift();
+    if (text == null) {
+      speechSpeaking = false;
+      speechUtterance = null;
+      renderQaStatus();   // the Stop control is state-derived: it goes away here
+      return;
+    }
+    var run = speechRun;
+    var u = new SpeechSynthesisUtterance(text);
+    var advance = function () {
+      if (run !== speechRun) return;   // cancelled: do not resume a dead queue
+      speechUtterance = null;
+      speakNext();
+    };
+    u.onend = advance;
+    u.onerror = advance;
+    speechUtterance = u;
+    try {
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      // Blocked (no user activation) or unavailable. Silent by design: the
+      // read-aloud button is the guaranteed path.
+      stopSpeaking();
+    }
+  }
+
+  function enqueueSpeech(chunks) {
+    if (!speechSupported() || !chunks || !chunks.length) return;
+    chunks.forEach(function (c) { speechQueue.push(c); });
+    if (speechSpeaking) return;   // the running chain will pick these up in order
+    speechSpeaking = true;
+    speakNext();
+  }
+
   function buildQuestionNode(q) {
     var msg = el("div", "qa-msg qa-q");
     msg.appendChild(el("span", "qa-label", "You"));
@@ -1428,11 +1528,32 @@
     return msg;
   }
 
+  // The guaranteed route to audio. Auto-speak needs user activation and the browser
+  // may refuse it; a click never is refused. Omitted entirely where the API is absent,
+  // so no dead control ships to Firefox.
+  function appendReadAloudButton(msg, body) {
+    if (!speechSupported()) return;
+    var chunks = toSpeechText(body);
+    if (!chunks.length) return;   // nothing left after sanitizing (e.g. code only)
+    var host = el("div", "qa-actions");
+    var btn = el("button", "btn small qa-read-btn", "🔊 Read aloud");
+    btn.type = "button";
+    btn.title = "Read this answer aloud";
+    btn.addEventListener("click", function () {
+      stopSpeaking();        // an explicit click jumps the queue
+      enqueueSpeech(chunks);
+      renderQaStatus();      // surface Stop now, not on the next poll tick
+    });
+    host.appendChild(btn);
+    msg.appendChild(host);
+  }
+
   function buildAnswerNode(q) {
     var msg = el("div", "qa-msg qa-a");
     msg.appendChild(el("span", "qa-label", "Agent"));
     if (q.answer) {
       msg.appendChild(el("div", "qa-text", q.answer));
+      appendReadAloudButton(msg, q.answer);
     } else if (q.kind === "background-request") {
       msg.appendChild(el("div", "qa-text qa-muted", "Background added to this finding."));
     } else {
@@ -1585,6 +1706,19 @@
       qaStatusHost.appendChild(el("div", "qa-notice",
         "Waiting on " + MAX_PENDING + " questions. Asking is paused until one is answered."));
     }
+    // Derived from speechSpeaking on every pass, because this host is cleared and
+    // rebuilt on each poll tick - a control kept as a DOM node would not survive one.
+    if (speechSpeaking && speechSupported()) {
+      var stopHost = el("div", "qa-actions");
+      var stopBtn = el("button", "btn small qa-stop-speaking-btn", "⏹ Stop speaking");
+      stopBtn.type = "button";
+      stopBtn.addEventListener("click", function () {
+        stopSpeaking();
+        renderQaStatus();
+      });
+      stopHost.appendChild(stopBtn);
+      qaStatusHost.appendChild(stopHost);
+    }
     qaStatusHost.style.display = qaStatusHost.childElementCount ? "" : "none";
   }
 
@@ -1680,6 +1814,7 @@
   function attachAnswers(answers) {
     var gotAnswer = false;
     var gotBackground = false;
+    var speakQids = [];
     answers.forEach(function (ans) {
       if (!ans || typeof ans.qid !== "string") return;
       var q = qaByQid[ans.qid];
@@ -1687,6 +1822,12 @@
       q.answered = true;
       q.answer = typeof ans.body === "string" ? ans.body : "";
       gotAnswer = true;
+      // Only answers to dictated questions speak themselves, and only on this first
+      // transition to answered - the guard above is what keeps a re-poll from
+      // repeating them. A background-request answer has no body to speak.
+      if (q.answer && q.kind !== "background-request" && voiceQids.has(q.qid)) {
+        speakQids.push(q.qid);
+      }
       if (q.kind === "background-request" && typeof ans.background === "string" && ans.background) {
         var target = null;
         aiAnnotations.forEach(function (a) { if (a.id === q.target.annotationId) target = a; });
@@ -1694,6 +1835,13 @@
         if (target) { target.background = ans.background; gotBackground = true; }
       }
     });
+    if (speakQids.length) {
+      // qaQuestions is in ask order, so walking it is askedAt order without a sort:
+      // two answers landing in one tick queue up, they never talk over each other.
+      qaQuestions.forEach(function (q) {
+        if (speakQids.indexOf(q.qid) !== -1) enqueueSpeech(toSpeechText(q.answer));
+      });
+    }
     if (gotBackground) renderAnnotations();   // details block appears, button goes away
     if (gotAnswer || !gotBackground) renderQa();
     ensurePolling();
@@ -1704,6 +1852,7 @@
     qaState = reason === "stale" ? "stale" : "ended";
     if (qaPollTimer !== null) { clearInterval(qaPollTimer); qaPollTimer = null; }
     abortQaDictation();
+    stopSpeaking();   // no voice outliving the session it belongs to
     closeQaComposer();
     // Re-show the no-server fallback path: whatever happened to the session, the
     // reviewer must still be able to save their decisions.
@@ -1846,6 +1995,8 @@
     // no localStorage backing (annotations and the general comment are drafted
     // through saveDraft()), and the fallback page must behave exactly as before.
     window.addEventListener("beforeunload", onBeforeUnload);
+    // Leaving or backgrounding the page must not leave a voice running behind it.
+    window.addEventListener("pagehide", function () { stopSpeaking(); });
   }
 })();
 </script>

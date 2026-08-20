@@ -619,91 +619,44 @@ injection markers, and save it: PR path to
 `/tmp/YYYY-MM-DD-pr-annotate-<repo>-<n>.html`, local path to
 `/tmp/YYYY-MM-DD-review-<branch>.html`.
 
-When live Q&A will be used (reviewer mode §4 "With live Q&A"), generate the nonce
-**before** this page-build step and `export` it so the Python heredoc in
-`references/reviewer-ui.md` §1 can read it:
+Generate the session nonce **before** the page-build step and `export` it so the
+Python heredoc in `references/reviewer-ui.md` §1 can read it. This is a normal
+part of reviewer-mode page build. Skip this step only when you are taking the
+single-shot fallback path documented below.
 
 ```bash
 export SESSION_NONCE=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c 24)
 ```
 
-`references/reviewer-ui.md` §1 then adds `"sessionNonce": os.environ["SESSION_NONCE"]`
-as an additional top-level field in the diff JSON. The page's `DATA.sessionNonce`, the
-server's `--nonce` argument, and the `--session-dir` directory name must all use the
-same value.
+`references/reviewer-ui.md` §1 adds `"sessionNonce": os.environ["SESSION_NONCE"]`
+as an additional top-level field in the diff JSON when the env var is set. The
+page's `DATA.sessionNonce`, the server's `--nonce` argument, and the
+`--session-dir` directory name must all use the same value.
 
-Then serve it and block for Submit with `scripts/review_server.py`. The default
-path is the same one-Bash-call discipline as author mode's step 3 (launch and wait
-in a single Bash call, generous timeout). When live Q&A is enabled, the server is
-started once and deliberately survives across agent turns: it writes incoming
+Then serve it and block for Submit with `scripts/review_server.py`. **Reviewer
+mode enables live Q&A by default whenever `python3` is available.** The server
+is started once and deliberately survives across agent turns: it writes incoming
 questions to the session directory, and the agent re-enters the wait block after
 answering them. T2's gate experiment confirmed a backgrounded review server
 process stays alive across separate Bash tool calls (see
-`.sisyphus/evidence/t2-gate-result.md`).
+`.sisyphus/evidence/t2-gate-result.md`). Use the single-Bash-call fallback below
+only when you cannot keep a background process alive across turns, or the user
+explicitly asks for a single-shot review with no Q&A.
 
-#### Without live Q&A (default)
-
-Use the same single-Bash-call block as author mode, just a different page path
-and out-file name. The server exits 0 on submit or 2 on timeout; it prints
-`PR_REVIEW_URL`, `PR_REVIEW_DONE`, and `PR_REVIEW_TIMEOUT` in addition to the
-browser-open sentinels.
-
-```bash
-OUT=/tmp/pr-annotations.json
-rm -f "$OUT"                         # clear any stale annotations first
-python3 <skill>/scripts/review_server.py \
-  --page /tmp/YYYY-MM-DD-pr-annotate-<repo>-<n>.html \
-  --out  "$OUT" --open --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
-PID=$!
-# Poll for the URL, with dead-process detection (bounded ~15s).
-URL=""
-for i in $(seq 1 30); do
-  URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
-  [ -n "$URL" ] && break
-  if ! kill -0 "$PID" 2>/dev/null; then
-    echo "ERROR: review server exited before printing a URL. Log:"
-    tail -20 /tmp/pr-review-server.log
-    exit 1
-  fi
-  sleep 0.5
-done
-if [ -z "$URL" ]; then
-  echo "ERROR: timed out waiting for the review server URL. Log:"
-  tail -20 /tmp/pr-review-server.log
-  exit 1
-fi
-# Wait for open sentinel (PR_REVIEW_OPEN_OK or PR_REVIEW_OPEN_FAILED), bounded ~10s.
-for i in $(seq 1 20); do
-  grep -q 'PR_REVIEW_OPEN_OK\|PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log && break
-  sleep 0.5
-done
-if grep -q 'PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log; then
-  case "$(uname)" in Darwin) open "$URL" ;; *) command -v xdg-open >/dev/null && xdg-open "$URL" ;; esac
-fi
-echo "Review page: $URL"
-# Always include this URL in your message to the user, open success or not.
-# Poll for the annotations file (robust: works even if the server already exited).
-while [ ! -f "$OUT" ]; do
-  kill -0 "$PID" 2>/dev/null || { echo "Server exited before Submit; check /tmp/pr-review-server.log (it may have hit --timeout; re-run this block)."; break; }
-  sleep 2
-done
-[ -f "$OUT" ] && cat "$OUT"
-```
-
-#### With live Q&A
+#### Standard: serve with live Q&A
 
 Live Q&A lets the user ask follow-up questions from the review page while the
 server is running. It requires three pieces of setup, all before the server
 starts: a fresh per-run nonce, the same nonce baked into the page's diff JSON as
-`sessionNonce` (see the "Build the page" note above), and a session directory on
-disk. The agent creates the directory, passes it to the server with `--session-dir`,
-and passes the nonce with `--nonce`. The page enables its Ask UI only when both the
-live marker and `sessionNonce` are present. The exact server flags are `--session-dir`,
-`--nonce`, and `--max-lifetime` (default 14400s); use them verbatim.
+`sessionNonce` (generated above), and a session directory on disk. The agent
+creates the directory, passes it to the server with `--session-dir`, and passes
+the nonce with `--nonce`. The page enables its Ask UI only when both the live
+marker and `sessionNonce` are present (`qaEnabled = isLive && sessionNonce !== null`).
+The exact server flags are `--session-dir`, `--nonce`, and `--max-lifetime`
+(default 14400s); use them verbatim.
 
-The launch block below assumes the page file already contains `sessionNonce`. Generate
-the nonce in the same Bash call that builds the page (before marker substitution), then
-re-use that same `$SESSION_NONCE` in this block.
+The launch block below assumes the page file already contains `sessionNonce`,
+using the same `$SESSION_NONCE` exported during page build.
 
 The server does **not** print a "questions pending" sentinel. New questions land
 as files in `<session_dir>/questions/`, and the agent detects them by checking
@@ -811,6 +764,55 @@ the next turn just checks `$SESSION_DIR/questions/` again and continues waiting.
 
 Before writing any answer, check whether `$OUT` exists. If it does, skip
 answering and proceed directly to submit handling.
+
+#### Fallback: serve without live Q&A
+
+Use the same single-Bash-call block as author mode, just a different page path
+and out-file name. The server exits 0 on submit or 2 on timeout; it prints
+`PR_REVIEW_URL`, `PR_REVIEW_DONE`, and `PR_REVIEW_TIMEOUT` in addition to the
+browser-open sentinels.
+
+```bash
+OUT=/tmp/pr-annotations.json
+rm -f "$OUT"                         # clear any stale annotations first
+python3 <skill>/scripts/review_server.py \
+  --page /tmp/YYYY-MM-DD-pr-annotate-<repo>-<n>.html \
+  --out  "$OUT" --open --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
+PID=$!
+# Poll for the URL, with dead-process detection (bounded ~15s).
+URL=""
+for i in $(seq 1 30); do
+  URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
+  [ -n "$URL" ] && break
+  if ! kill -0 "$PID" 2>/dev/null; then
+    echo "ERROR: review server exited before printing a URL. Log:"
+    tail -20 /tmp/pr-review-server.log
+    exit 1
+  fi
+  sleep 0.5
+done
+if [ -z "$URL" ]; then
+  echo "ERROR: timed out waiting for the review server URL. Log:"
+  tail -20 /tmp/pr-review-server.log
+  exit 1
+fi
+# Wait for open sentinel (PR_REVIEW_OPEN_OK or PR_REVIEW_OPEN_FAILED), bounded ~10s.
+for i in $(seq 1 20); do
+  grep -q 'PR_REVIEW_OPEN_OK\|PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log && break
+  sleep 0.5
+done
+if grep -q 'PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log; then
+  case "$(uname)" in Darwin) open "$URL" ;; *) command -v xdg-open >/dev/null && xdg-open "$URL" ;; esac
+fi
+echo "Review page: $URL"
+# Always include this URL in your message to the user, open success or not.
+# Poll for the annotations file (robust: works even if the server already exited).
+while [ ! -f "$OUT" ]; do
+  kill -0 "$PID" 2>/dev/null || { echo "Server exited before Submit; check /tmp/pr-review-server.log (it may have hit --timeout; re-run this block)."; break; }
+  sleep 2
+done
+[ -f "$OUT" ] && cat "$OUT"
+```
 
 ##### Answering questions
 

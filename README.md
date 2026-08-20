@@ -128,10 +128,10 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 
 | Requirement | Reviewer mode | Author mode |
 |---|---|---|
-| An agent with shell access | Required. Backgrounding a process is needed only for the optional live server | Required, same |
+| An agent with shell access | Required. Backgrounding a process is required for the standard live server with Q&A; not needed for the fallback path or subcommands | Required, same |
 | `git` and a browser | Required | Required |
 | `gh`, authenticated | Only to review a real PR; reviewing a local branch needs none | Never used. Reads your local git history only |
-| `python3` | Optional. Runs the live review server; without it the page falls back to a download button. **Required for live Q&A** — without `python3` the Ask UI is absent, though annotations still work via download. | Optional, identical fallback |
+| `python3` | Required for the standard live server and in-page Q&A. Without it the page falls back to a download button and the Ask UI is absent, though annotations still work via download. | Optional, identical fallback |
 
 The `explain` and `summarize-changes` subcommands are lighter: they touch `gh` in a
 read-only way only when you hand them a PR URL, need no `gh` at all for a local branch,

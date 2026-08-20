@@ -642,16 +642,18 @@ The canonical launch/wait blocks live in `SKILL.md` reviewer mode §4, because t
 agent carrying out the workflow is the one who needs a copy-pasteable Bash block.
 This section only describes the choices and points there.
 
-- Default reviewer mode (no live Q&A): use the single-Bash-call block in
-  `SKILL.md` reviewer mode §4 "Without live Q&A (default)". The server exits 0 on
-  submit or 2 on timeout; it prints `PR_REVIEW_URL`, `PR_REVIEW_DONE`, and
-  `PR_REVIEW_TIMEOUT`.
-- With live Q&A enabled: use the `--session-dir`/`--nonce`/`--max-lifetime` block
-  in `SKILL.md` reviewer mode §4 "With live Q&A". The server is launched once and
-  survives across agent turns. Pending questions are detected by globbing
-  `<session_dir>/questions/*.json` and checking for matching
-  `<session_dir>/answers/<qid>.json`; the server itself prints no questions-pending
-  sentinel. The same SKILL.md section also documents the answer turn.
+- Standard reviewer mode (live Q&A enabled): use the `--session-dir`/`--nonce`/
+  `--max-lifetime` block in `SKILL.md` reviewer mode §4 "Standard: serve with live
+  Q&A". The server is launched once and survives across agent turns. Pending
+  questions are detected by globbing `<session_dir>/questions/*.json` and checking
+  for matching `<session_dir>/answers/<qid>.json`; the server itself prints no
+  questions-pending sentinel. The same SKILL.md section also documents the answer
+  turn.
+- Fallback (no live Q&A): use the single-Bash-call block in `SKILL.md` reviewer
+  mode §4 "Fallback: serve without live Q&A". Use this only when you cannot keep
+  a background process alive across turns, or the user explicitly asks for a
+  single-shot review with no Q&A. The server exits 0 on submit or 2 on timeout;
+  it prints `PR_REVIEW_URL`, `PR_REVIEW_DONE`, and `PR_REVIEW_TIMEOUT`.
 
 Run either block as a single Bash tool call. In Q&A mode the call ends when
 questions arrive (emits `PR_REVIEW_QUESTIONS <qids>` and exits 0), then the agent

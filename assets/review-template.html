@@ -1529,12 +1529,14 @@
   }
 
   // The guaranteed route to audio. Auto-speak needs user activation and the browser
-  // may refuse it; a click never is refused. Omitted entirely where the API is absent,
-  // so no dead control ships to Firefox.
+  // may refuse it; a click never is refused. On EVERY answer that has text, and absent
+  // only where the API itself is - so no dead control ships to Firefox. An answer that
+  // sanitizes down to nothing (all code) still gets the button: enqueueSpeech() no-ops
+  // on an empty chunk list, so the click stops any current speech and says nothing,
+  // which beats a button that is there on some answers and not others.
   function appendReadAloudButton(msg, body) {
     if (!speechSupported()) return;
     var chunks = toSpeechText(body);
-    if (!chunks.length) return;   // nothing left after sanitizing (e.g. code only)
     var host = el("div", "qa-actions");
     var btn = el("button", "btn small qa-read-btn", "🔊 Read aloud");
     btn.type = "button";

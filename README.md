@@ -55,7 +55,12 @@ and request background on AI callouts while the review is open.
 Those questions can be spoken instead of typed. A mic button in the Ask box dictates
 into the question field, and every answer carries a read-aloud button, so you can
 review a diff with your hands on the code. Speech input needs Chrome, Edge or Safari;
-Firefox doesn't ship it, and the mic button simply doesn't appear there. One caveat
+Firefox doesn't ship it, and the mic button simply doesn't appear there. Some
+Chromium-based browsers, Brave among them, do show the button but have no speech
+service behind it, so dictation reports that recognition is unavailable and you type
+instead. Read-aloud picks the best voice the browser exposes, which on macOS means
+installing an Enhanced or Premium voice under Accessibility if the default sounds
+robotic. One caveat
 before you dictate anything about proprietary code: a browser's speech recognition may
 send the microphone audio to the vendor's own speech service to transcribe it, Chrome's
 does, while typing keeps the whole exchange local.

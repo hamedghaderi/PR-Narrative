@@ -682,6 +682,27 @@ plus a stop-speaking control shown whenever something is playing. Nothing
 voice-related is persisted (no `localStorage`, per the ephemeral-Q&A rule), and the
 question and answer wire and file formats are unchanged.
 
+**Voice support is narrower than feature detection suggests.** A present constructor
+proves only that the binding exists. Chromium maps every speech-backend failure onto
+the single `network` error, so a fork built without Google's speech service (Brave is
+the documented case) shows the mic button and then fails on the first click; the page
+cannot detect this in advance, which is why the `network` message is worded around
+browser support rather than connectivity. `recognition.lang` prefers a region-carrying
+tag, taking `navigator.language` ahead of `document.documentElement.lang`, because the
+engine is handed the tag unchanged and a bare `"en"` leaves the locale to chance.
+
+On the reply side the page selects a voice rather than accepting the default, which on
+macOS is a dated formant voice. Selection is automatic and has no UI: novelty voices
+(Zarvox, Bubbles, Bad News and the rest, all tagged as ordinary English) are rejected,
+an exact locale match outranks a name-based quality guess (`Premium`, `Enhanced`,
+`Natural`, `Neural`), and network voices are penalised so read-aloud keeps working
+offline. The list is resolved lazily and re-resolved on `voiceschanged`, since
+`getVoices()` is empty until the engine has built it; when nothing suitable exists
+`utterance.voice` is left unset, which is the OS default. Note that Safari does not
+expose macOS downloadable voices to Web Speech at all, so read-aloud there can stay on
+a legacy voice however many Enhanced voices are installed; Chromium browsers do expose
+them.
+
 ## 4. After submit: PR mode
 
 `$OUT` is the raw `review-annotations` submission payload; it can be piped directly

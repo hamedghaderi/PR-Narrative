@@ -158,6 +158,7 @@
                         background:#fff;color:var(--ink)}
   .qa-composer .qa-count{margin-top:2px;text-align:right;font-size:11px;color:var(--muted)}
   .qa-composer .actions{display:flex;gap:8px;margin-top:6px}
+  .qa-mic-btn.recording{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
   .btn:disabled{opacity:.5;cursor:default}
   .btn:disabled:hover{background:var(--panel-bg)}
 
@@ -300,6 +301,9 @@
   var POLL_FAILURES_BEFORE_END = 3;
   var qaQuestions = [];            // in ask order; each entry is a question + its answer
   var qaByQid = {};
+  // qids whose question text was dictated, in whole or in part. Client-side only:
+  // the wire payload and the question files on disk are unchanged by dictation.
+  var voiceQids = new Set();
   var qaCounter = 0;
   var qaState = "active";          // "active" | "ended" (server gone) | "stale" (409)
   var qaPollTimer = null;
@@ -1167,8 +1171,79 @@
   }
 
   function closeQaComposer() {
+    abortQaDictation();
     var open = document.querySelector(".qa-composer");
     if (open) open.remove();
+  }
+
+  // ---- push-to-talk dictation (Web Speech API) ----
+  // Chrome/Edge/Safari only. When the constructor is missing (Firefox) no mic
+  // affordance is created at all, so that composer is the one that shipped before
+  // this feature existed. One recognizer, one live session; the composer that
+  // started it owns qaDictation, and every teardown path clears that ownership so
+  // a stray late event can never write into a removed textarea.
+  var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var qaRecognition = null;
+  var qaDictating = false;
+  var qaDictation = null;   // { onFinal, onFailure, onIdle } of the owning composer
+
+  var QA_MIC_ERRORS = {
+    "not-allowed": "Microphone permission was denied. Allow microphone access for this page, or type the question instead.",
+    "service-not-allowed": "The browser blocked its speech service for this page. Allow microphone access, or type the question instead.",
+    "no-speech": "No speech was detected. Press the mic and speak, or type the question instead.",
+    "audio-capture": "No microphone was found. Connect one, or type the question instead.",
+    "network": "The speech service could not be reached. Check the connection, or type the question instead.",
+    "aborted": "Dictation stopped before anything was transcribed."
+  };
+
+  function qaMicErrorMessage(code) {
+    if (code && QA_MIC_ERRORS[code]) return QA_MIC_ERRORS[code];
+    return "Dictation failed (" + (code || "unknown error") + "). Type the question instead.";
+  }
+
+  function ensureQaRecognition() {
+    if (qaRecognition) return qaRecognition;
+    var r = new SpeechRecognitionCtor();
+    r.lang = document.documentElement.lang || "en-US";
+    r.interimResults = false;   // final transcripts only: the reviewer edits text, not a stream
+    r.continuous = false;       // push-to-talk, never an open conversation channel
+    r.onresult = function (ev) {
+      var session = qaDictation;
+      if (!session || !ev || !ev.results) return;
+      var text = "";
+      for (var i = ev.resultIndex || 0; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) text += ev.results[i][0].transcript;
+      }
+      text = text.trim();
+      if (text) session.onFinal(text);
+    };
+    r.onerror = function (ev) {
+      var session = qaDictation;
+      if (session) session.onFailure(qaMicErrorMessage(ev && ev.error));
+    };
+    r.onend = function () {
+      qaDictating = false;
+      if (qaDictation) qaDictation.onIdle();
+    };
+    qaRecognition = r;
+    return r;
+  }
+
+  function stopQaDictation() {
+    if (!qaRecognition || !qaDictating) return;
+    try { qaRecognition.stop(); } catch (e) {}   // onend returns the button to idle
+  }
+
+  // Called on every composer teardown path. Guarded and idempotent: without it a
+  // removed composer would leave the browser's recording indicator lit.
+  function abortQaDictation() {
+    var session = qaDictation;
+    qaDictation = null;
+    if (qaRecognition && qaDictating) {
+      qaDictating = false;
+      try { qaRecognition.abort(); } catch (e) {}
+    }
+    if (session) session.onIdle();
   }
 
   function openQaComposer(opts) {
@@ -1196,13 +1271,65 @@
     var status = el("div", "qa-status");
     c.appendChild(status);
 
+    var micBtn = null;
+    var dictated = false;   // any part of this question came from speech
+    if (SpeechRecognitionCtor) {
+      micBtn = el("button", "btn small qa-mic-btn", "🎤 Dictate");
+      micBtn.type = "button";
+      micBtn.title = "Dictate the question, then edit it before sending";
+      actions.insertBefore(micBtn, cancelBtn);
+
+      var recording = false;
+      var setRecording = function (on) {
+        recording = on;
+        if (on) micBtn.classList.add("recording"); else micBtn.classList.remove("recording");
+        micBtn.textContent = on ? "🎤 Stop" : "🎤 Dictate";
+      };
+      var appendTranscript = function (text) {
+        dictated = true;
+        var base = ta.value.replace(/\s+$/, "");
+        var merged = base ? base + " " + text : text;
+        // Programmatic assignment neither fires "input" nor honours maxLength, so the
+        // §5.6 cap and the counter are both applied by hand here.
+        ta.value = merged.slice(0, MAX_QUESTION_CHARS);
+        count.textContent = ta.value.length + " / " + MAX_QUESTION_CHARS;
+        ta.focus();
+      };
+      micBtn.addEventListener("click", function () {
+        if (recording) { stopQaDictation(); return; }
+        clearNode(status);
+        var r = ensureQaRecognition();
+        qaDictation = {
+          onFinal: appendTranscript,
+          onFailure: function (message) {
+            clearNode(status);
+            status.appendChild(el("div", "qa-notice", message));
+          },
+          onIdle: function () { setRecording(false); }
+        };
+        try {
+          r.start();
+        } catch (e) {
+          // InvalidStateError: the previous session has not finished winding down.
+          qaDictation = null;
+          status.appendChild(el("div", "qa-notice", "Dictation is still starting. Try again in a moment."));
+          return;
+        }
+        qaDictating = true;
+        setRecording(true);
+      });
+    }
+
     cancelBtn.addEventListener("click", function () {
+      abortQaDictation();
       c.remove();
       if (opts.afterClose) opts.afterClose();
     });
 
     function attempt(q) {
       sendBtn.disabled = true; cancelBtn.disabled = true;
+      if (micBtn) micBtn.disabled = true;
+      abortQaDictation();   // the send is committed; nothing may still be listening
       clearNode(status);
       status.appendChild(el("div", "qa-pending", "Sending…"));
       postQuestion(q).then(function () {
@@ -1211,6 +1338,7 @@
         renderQa();
       }).catch(function (err) {
         sendBtn.disabled = false; cancelBtn.disabled = false;
+        if (micBtn) micBtn.disabled = false;
         showQaError(status, err.message, function () { attempt(q); });
       });
     }
@@ -1220,10 +1348,12 @@
       if (!body) { ta.focus(); return; }
       if (body.length > MAX_QUESTION_CHARS) body = body.slice(0, MAX_QUESTION_CHARS);
       if (!canAsk()) { showQaError(status, askBlockedReason(), null); return; }
-      attempt(makeQuestion({
+      var q = makeQuestion({
         kind: "question", target: opts.target,
         threadId: opts.threadId, parentQid: opts.parentQid, body: body
-      }));
+      });
+      if (dictated) voiceQids.add(q.qid);
+      attempt(q);
     });
 
     if (opts.insertBefore && opts.container) {
@@ -1573,6 +1703,7 @@
     if (qaState !== "active") return;
     qaState = reason === "stale" ? "stale" : "ended";
     if (qaPollTimer !== null) { clearInterval(qaPollTimer); qaPollTimer = null; }
+    abortQaDictation();
     closeQaComposer();
     // Re-show the no-server fallback path: whatever happened to the session, the
     // reviewer must still be able to save their decisions.

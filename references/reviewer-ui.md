@@ -88,8 +88,8 @@ PYEOF
 ```
 
 > [!IMPORTANT]
-> The `.replace("</", "<\\/")` on the dumped JSON is load-bearing, not defensive
-> fluff. The diff JSON embeds the reviewed diff's own lines, and any diff that
+> The `.replace("</", "<\\/")` on the dumped JSON is required for this to work. It is not
+> an extra precaution. The diff JSON embeds the reviewed diff's own lines, and any diff that
 > touches a file containing a literal `</script>` (an HTML view with an inline
 > script, a JS template, docs) would otherwise terminate the
 > `script#review-data` element early at HTML-parse time, so the rest of the JSON
@@ -147,9 +147,9 @@ the caps, and don't invent a fifth reason to comment.
   annotation with `accepted: true`. This mirrors the default stated in
   `references/annotation-schema.md` §1: "AI annotations (`origin: "ai"`) default to
   `accepted: false`."
-- **Every `body` follows §2c.** Deciding a line qualifies is only half the work. How the
-  comment is worded is governed by §2c below: lead with the problem in plain English,
-  then the consequence, then an example if it helps, then a suggestion or question. A
+- **Every `body` follows §2c.** Deciding a line qualifies is only half the work. Read and
+  apply §2c when drafting the body; it is the sole authority for wording, ordering,
+  length, and how evidence is presented, and it is not summarized here on purpose. A
   correct finding a reviewer cannot follow has not landed.
 
 Populate `diff_json["aiAnnotations"]` with objects following the annotation object
@@ -212,75 +212,194 @@ missing error handling, and breaking-change risks belong to §2's list, not this
 
 ## 2c. Writing the finding body (applies to §2 and §2b)
 
-§2 and §2b decide **whether** a line deserves a comment. This section decides **how the
-comment reads**, and it applies to every AI draft either policy produces.
+§2 and §2b decide **whether** a line needs a comment. This section explains **how to
+write** every AI comment.
 
-**Which field this governs.** This is about `body`, the text a reviewer actually reads
-on the page and the only prose that reaches GitHub (`scripts/build_review.py` carries
-`body` and `disproof` into the posted comment and nothing else). `reasoning` stays one
-sentence: it renders as the in-page "Why flagged" line and never leaves the browser.
+> **This section is the single source of truth for AI comment wording.** Other documents
+> explain when comments are created and how they are sent. They point here instead of
+> repeating these rules. If another file disagrees with this section, this section is
+> correct and the other file has a bug.
 
-**Who you are writing for.** Assume a junior developer, a QA engineer, or someone who
-has never opened this part of the codebase. The test is blunt: they should understand
-the concern after reading it **once**, without opening another file first. Finding a
-real problem is only half the job; a correct comment nobody can act on has not landed.
+**Which field this covers.** This section covers `body`, the text the reviewer reads on
+the page. It is also the only text sent to GitHub. `scripts/build_review.py` sends `body`
+and `disproof`, and nothing else. `reasoning` stays one sentence. It appears on the page
+as the "Why flagged" line and never leaves the browser.
 
-### Order: problem, then consequence, then example, then suggestion
+**Who you are writing for.** Assume a junior developer, a QA engineer, or someone who has
+never opened this part of the code. They should understand the concern after reading it
+**once**. They should not need to open another file first. Finding a real problem is only
+half the job. The comment must also tell the reader what they can do.
 
-1. **Open with the problem in plain English.** The first sentence must stand on its own
-   without the reader opening another file. No identifier is allowed to carry the
-   meaning of that sentence.
-2. **Say why it matters.** What actually goes wrong, in terms of behavior a person
-   could observe.
-3. **Give one concrete example or scenario**, when it makes the concern easier to
-   believe. Skip it when the problem is already obvious.
-4. **Close with a suggested change or a clear question.** Leave the reader something to
-   do or something to answer.
+### Order: result, then explanation, then evidence, then action
 
-Class names, method names, queries and line references are **supporting evidence**.
-They belong after the plain sentence, never in front of it.
+Start with the simplest real failure or loss that a user, a caller, or the system can see.
+Say what becomes wrong, missed, stuck, slow, or left behind. Say it before you explain why.
 
-Never use the reverse order: implementation detail, then code history, then edge cases,
-then the conclusion. If the point of the comment only becomes clear in the last
-sentence, rewrite it.
+**Saying what is wrong in the code is not the same as saying what it causes.** "These two
+paths filter differently" describes the mechanism. "The two pages can show different
+counts for the same record" describes the result. Both use plain English. Both make sense
+without opening another file. Only the second one tells the reader why it matters. If your
+first sentence only says the code is inconsistent, add what that costs the reader.
+
+1. **Start with the result the reader can see.** The first sentence must stand on its own.
+   The reader should not need to recognize a name, know how two classes relate, or run the
+   code in their head to see why the finding matters.
+2. **Explain it in simple steps.** What causes the failure, and what the system does when
+   it happens.
+3. **Add the evidence that links the changed line to the result.** Add only as much as the
+   reader needs to check the claim.
+4. **End with one clear question or one suggested change.**
+
+Class names, method names, queries and line numbers are **supporting evidence**. They come
+after the plain sentence, never before it.
+
+Start with the **closest** result your evidence supports, not the worst one you can think
+of. "This record fails to render", which you can trace, is better than "the page goes
+down", which you cannot.
+
+For an `important` finding, do not start with exception handling, query behavior,
+transaction order, code history, or how one class relates to another. Those are supporting
+evidence.
+
+**Put the result first so the reader understands. Keep the proof so the reader can
+check.** The reader should understand the claimed result before studying the code. They
+still need the technical evidence afterwards to decide whether the claim is true. Never
+drop the proof to make the comment shorter.
+
+### When you cannot prove a result
+
+Use a result-first opening only when you can support the result. Do not invent one. Some
+real findings have no effect you can trace, and inventing one creates exactly the guessing
+that the `disproof` rule exists to prevent.
+
+If you cannot trace a result, **say the smallest behavior you can actually prove**. Then
+be clear about what that does and does not show:
+
+- "This runs one query per row" may be provable when "the page can time out" is not.
+- "These two locks are taken in opposite order" may be exact when you cannot prove that a
+  deadlock can really happen.
+- "This new branch has no test" can be an honest `nit` with no real failure attached.
+
+Having only the mechanism may mean the finding is less serious. It does not allow you to
+add more. Under the locked policy in §2, if the mechanism does not show one of the allowed
+risks, mark the finding as `nit` or drop it. Never invent an effect just to follow the
+order in this section.
+
+### Keep the order, but vary the words
+
+This rule sets what comes first. It does not set the words you use. Ten comments that all
+start the same way are hard to read, even when each one is correct.
+
+There is no required opening phrase. Do not start every comment with "This can", "This
+could lead to", or "This is a risk". Name the thing that is affected and make it the
+subject of the sentence:
+
+- "New uploads can stop being processed, and no one is told."
+- "A failed cleanup can leave the temporary file on disk."
+- "The list page and the detail page can show different statuses."
+- "Rendering a record can fail at the date cell."
+
+### Match the claim to the evidence
+
+Do not make the result sound more certain than your evidence. Use "will" only when it
+always happens. Use "can" or "may" when it happens sometimes. If it only happens under
+some condition, say what that condition is.
+
+Some words are claims by themselves: "permanently", "data loss", "outage", or saying that
+something fails without any error. Use them only if you can show it. "Permanently" means
+you checked that nothing fixes it later.
+
+### Write the opening and the `disproof` together
+
+For an `important` finding, write the first sentence and the `disproof` at the same time.
+**The `disproof` must test the same problem, in the same place, that the first sentence
+described.**
+
+If your first sentence says a page can fail, it is not enough to show that a helper
+function throws an error. Load the page. Or show that the bad input can really get there.
+When the `disproof` tests something smaller than what you claimed, a comment that says too
+much can still pass review.
+
+If you cannot connect the result to a path the code can really take, do one of these: say
+only what you can prove, write the assumption into the comment, lower the severity, or
+drop the finding.
+
+### Background work: questions to ask yourself
+
+Some failures look small because nothing reports an error. Use the questions below to
+**understand** the finding before you write it. They are for your own thinking. Do not
+write them out as six steps in the comment. Include only the answers the reader needs.
+
+Use them when **both** of these are true:
+
+1. The finding is about a failure, a skipped item, or work that only half finished. This
+   covers code that runs in the background, runs again on a schedule, or handles many
+   items in one run: scheduled jobs, queue consumers, batch processing, retries, and
+   cleanup tasks. It also covers code that can write to the database or to another system
+   before it finishes.
+2. After the failure, the code can keep going, mark the work as done, try again later, or
+   leave half-finished data behind. Whether someone notices, and whether the next run
+   fixes it, changes how bad the problem is.
+
+If the failure goes straight back to the caller and undoes its own work, these questions
+do not apply. Describe what the caller sees instead.
+
+The questions: What can go wrong? What does the system do when it happens? What does the
+user lose, or fail to notice? Can the next run fix it automatically? If it cannot, what
+happens over time?
+
+In this kind of code, an error that is caught and only written to the log is rarely just
+"the exception is ignored". It usually means something stops working and nobody is told.
+That is the sentence to start with. For example: "If this keeps failing, these records are
+never checked again, and no one is told."
+
+For other kinds of code, use the same order with the result that fits. For a UI change,
+say what the user sees or cannot do. For a request handler, say what the caller gets back.
+For a refactor, say what behavior could change. If a refactor changes no behavior and you
+only prefer a different style, it is not a finding under §2 at all.
 
 ### Length scales with severity and complexity
 
-Keep every comment as short as it can be without losing the reasoning needed to
-understand the concern. Padding a simple point into four beats is a defect; so is
-compressing a subtle one until the reason disappears.
+Keep every comment as short as you can, but keep the reasoning the reader needs. Do not
+stretch a simple point into four parts. Do not squeeze a hard point until the reason
+disappears.
 
 | Finding | Shape |
 |---|---|
-| `important`, and the reasoning is not obvious | All four beats, in short paragraphs. |
-| `important`, but the problem is self-evident once stated | Problem, consequence, suggestion. Drop the example. |
-| `nit` or `pre_existing` | One or two plain sentences. Never four beats. |
+| `important`, and the reason is not obvious | Result, plain explanation, the evidence that connects them, action. Short paragraphs. |
+| `important`, but clear as soon as you say it | Result, the smallest explanation needed, action. Drop the example. |
+| `nit` or `pre_existing` | One or two direct sentences. Never four parts. Give a result only when it is real and you can show it. |
+
+**This is an exception to the rule above.** Start with a result when you have a real one.
+Some small findings have no real effect on anyone: a style point, a naming question, a
+missing test. For those, say the small thing directly and suggest the change in one or two
+sentences. **Never invent or exaggerate an effect just to follow the order.** A style point
+written as if it were a risk is worse than the same point written plainly, because the
+reader stops trusting your next comment.
 
 ### Describe behavior, not mechanics
 
 Explain what can actually happen at runtime, not what the code technically says.
 
-When two code paths disagree, state it outright rather than leaving the reader to infer
-it: **"These two paths can return different results for the same input."** Then explain
-why in one sentence.
+When two code paths disagree, say so directly. Do not make the reader work it out:
+**"These two paths can return different results for the same input."** Then explain why
+in one sentence.
 
-Specific cases that are routinely written too densely:
+Cases that are often written too densely:
 
-- **Performance.** Name the unnecessary work that happens and roughly why it costs
-  something. "This runs one query per row, so a 500-row page issues 500 queries" beats
-  "N+1 risk".
-- **A magic number or a hidden dependency.** Say what other behavior the value depends
-  on, and what would break if that behavior changed later.
-- **A fallback that hides a mistake.** Say what the caller was expected to do, what
-  happens if they forget, and why that is dangerous.
-- **A cross-file relationship.** Spell out how the two pieces relate. Do not assume the
-  reader already knows that one method calls the other, or that two classes share a
-  base.
+- **Performance.** Say what extra work happens and why it costs something. "This runs one
+  query per row, so a 500-row page runs 500 queries" is better than "N+1 risk".
+- **A magic number or a hidden dependency.** Explain what the value depends on. Explain
+  what would break if that other thing changed.
+- **A fallback that hides a mistake.** Say what the caller was supposed to do. Say what
+  happens if they forget. Say why that is dangerous.
+- **A link between two files.** Explain how the two pieces relate. Do not assume the
+  reader already knows that one method calls the other, or that two classes share a base.
 
 ### Name the kind of concern in words, not in `severity`
 
-Be explicit about what sort of problem this is, and do not let a comment sound more
-serious than it is:
+Say what type of problem this is. Do not make the comment sound more serious than the
+problem is:
 
 - a correctness bug
 - a possible inconsistency
@@ -288,31 +407,65 @@ serious than it is:
 - a maintainability concern
 - a cosmetic improvement
 
-Say it in the prose. **Do not encode it in `severity`**, which stays exactly
-`"important" | "nit" | "pre_existing"` per `references/annotation-schema.md` §1 and
-gains no new values for this. The five kinds above and the three severity levels are
-different axes: a performance issue can be `important`, and a correctness bug in dead
-code can be a `nit`.
+Write it in the text. **Do not put it in `severity`**, which stays exactly
+`"important" | "nit" | "pre_existing"` per `references/annotation-schema.md` §1 and gains
+no new values for this. Problem type and severity are separate. A performance issue can be
+`important`. A correctness bug in dead code can be a `nit`.
 
-### Unpack compressed phrases
+### Use simple English
 
-The problem is not technical vocabulary, it is **unexplained** vocabulary. A precise
-term is welcome once the reader has been given the plain version; a term used *instead
-of* the plain version is not.
+Write so that a developer with strong technical skills but weaker English understands the
+comment on the first read. This does not mean writing a less technical comment. It means
+explaining a technical problem in easy words.
 
-Phrases like these must not carry the weight of a sentence on their own: "load-bearing",
-"data drift", "escape hatch", "silent contract", "invariant", "forward path", "narrows
-the batch", "hydrates rows". Each one compresses a real idea into a phrase the reader
-has to decompress before they can even start evaluating the concern.
+- Use common words instead of rare or advanced ones.
+- Use short sentences. If a sentence has two ideas, make it two sentences.
+- No idioms, no metaphors, no clever phrasing.
+- **Keep real technical names**: class names, method names, field names, database terms,
+  and framework concepts. Never replace a precise technical term with a vague one.
 
-Two ways to fix one:
+**Words to avoid, and what to write instead.** These English words are common in native
+writing and hard for everyone else. The problem is not that they are technical; it is that
+a simpler word means the same thing.
 
-- Replace it with what it actually means here. "load-bearing" becomes "this value is
-  depended on by X, and if X changes this breaks".
-- Or keep the term and define it inline, in half a sentence, right where it appears.
+| Avoid | Write instead |
+|---|---|
+| the values can drift | the values can get out of sync |
+| load-bearing | other code depends on this value |
+| an escape hatch | a way to skip the normal path |
+| this breaks an invariant | this breaks a rule the code depends on |
+| the query truncates the window | the query can miss some rows |
+| the code hydrates all rows | the code loads all rows |
+| this is a carve-out | this is an exception to the rule |
+| reachability is not established | we cannot prove this case can happen |
+| downstream consumers | code that uses this result later |
+| it fails silently | it fails without an error, so no one is told |
+| surfaces an error | shows an error |
+| this changes the semantics | this changes what the code does |
+| reconcile the two paths | make the two paths agree |
 
-This rule governs **generated review comments**. The skill's own internal notes about
-build steps and escaping stay as precise as they need to be.
+Prefer the plain version on the left of each pair below:
+
+- "The list page and the detail page can show different counts." Not: "The two evaluation
+  paths can diverge in their computed results."
+- "If this keeps failing, these records are never checked." Not: "A persistent failure can
+  leave the records indefinitely unevaluated."
+- "The next run cannot fix this automatically." Not: "The failure is not self-healing."
+
+A precise technical term is still welcome once the reader has the plain version first. A
+term used *instead of* the plain version is not. If you want to keep a term, define it in
+half a sentence, right where it appears.
+
+**Check before you inject the comment:**
+
+- Could a developer who is not a native English speaker understand this after one read?
+- Is there a simpler common word that means the same thing?
+- Am I using an idiom where plain English would be clearer?
+- Are any sentences too long?
+- Can I split one long sentence into two short ones?
+
+This rule governs **generated review comments** and the narrative panel. The skill's own
+internal notes about build steps and escaping stay as precise as they need to be.
 
 ### Evidence discipline
 
@@ -328,44 +481,93 @@ build steps and escaping stay as precise as they need to be.
 ### Check every body before you inject it
 
 - Can someone understand this after reading it once?
-- Is the actual problem stated before the technical proof?
-- Does it explain behavior that can really happen, rather than restating the code?
-- Are cross-file and cross-class relationships explained rather than assumed?
-- Is the implementation history gone?
-- Would simpler words carry the same information without losing it?
-- Does the stated seriousness match the real seriousness?
+- **Does the first sentence say what goes wrong for someone, rather than what is wrong
+  with the code?** "These paths filter differently" fails this; "the two pages can show
+  different counts" passes it.
+- **Can the reader see why it matters without running the code in their head?**
+- Is the technical proof still there, after the result instead of replacing it?
+- If it starts with a mechanism, is that really the strongest claim the evidence supports?
+  Or was it just the easiest sentence to write?
+- Does it describe behavior that can really happen, instead of repeating the code?
+- Does the wording match the evidence: "will" for always, "can" for sometimes, or a stated
+  condition?
+- For an `important` finding, does the `disproof` test the same result, in the same part of
+  the system, that the first sentence named?
+- Are links between files and classes explained instead of assumed?
+- Is the history of how the code got this way gone?
+- Would simpler words say the same thing?
+- Could a developer who is not a native English speaker understand this after one read?
+- Does the stated seriousness match the real seriousness? Did you avoid inventing a result
+  just to follow the order?
 
-If a finding cannot be explained simply, your own understanding of it is the thing that
-needs simplifying, not the wording. If it still will not come out clearly, it is not
-ready: demote it to `nit` or drop it. This sits alongside the `disproof` rule in §2,
-which already says an unfalsifiable concern is not an `important` finding.
+If you cannot explain a finding simply, the problem is usually your own understanding, not
+the wording. Fix that first. If it still will not come out clearly, it is not ready: mark
+it `nit` or drop it. This works together with the `disproof` rule in §2, which already says
+that a concern you cannot test is not an `important` finding.
 
-### A rewrite, before and after
+### A rewrite, in three passes
+
+Look closely at the middle version in each pair. It already uses plain English and no
+jargon, but it is still wrong. It starts with the mechanism instead of the result.
+
+**1. Two paths that filter differently.**
 
 Too dense:
 
-> The batch narrows forward product counts to the source's own delivery type while the
-> single-source evaluator counts all types, so the two can return different
-> actualCounts for the same source.
+> The list query scopes to non-archived rows while the detail calculation counts all of
+> them, so the two can return different statuses for the same record.
 
-Clear:
+Plain, but still mechanism-first:
 
-> Here we only count rows matching the price source's current `delivery_type_id`, but
-> `EvaluateForwardCheck` does not apply that filter. This means the batch check and the
-> single-source check can return different counts for the same price source. For
-> example, this can happen if the delivery type changes while older rows still exist.
+> Here we exclude archived rows, but `calculateStatus()` does not apply that filter. This
+> means the list query and the detail calculation can return different statuses for the
+> same record. For example, this can happen once a record has been archived but older
+> entries still point at it. Could we make both paths use the same filtering rule?
+
+Consequence-first:
+
+> The list page and the detail page can show different statuses for the same record.
+>
+> The list excludes archived rows, while the detail calculation still includes them.
+>
 > Could we make both paths use the same filtering rule?
 
+Its `disproof` has to test that same claim at that same boundary:
+
+> Archive a row that feeds one record's status, then open that record in the list and on
+> its detail page. If both show the same status, this concern is false.
+
+That opening assumes these two paths provide the data for these two pages. If you have not
+proved that, use a smaller opening that says only what you can show: "The list query and
+the detail calculation can return different statuses for the same record." A smaller claim
+is better than a claim your evidence does not support.
+
+**2. A hard-coded time window.**
+
 Too dense:
 
-> `subDays(3)` is load-bearing but unexplained.
+> The seven-day window here is load-bearing but unexplained.
 
-Clear:
+Plain, but still mechanism-first:
 
-> `subDays(3)` depends on how far `lastCompletedDeliveryDay()` can look back. Three days
-> is enough with the current logic, but if that lookback changes later this query may
-> stop loading enough data. Could we add a comment explaining that dependency, or derive
-> the value from the same source?
+> This query window is hard-coded to seven days. The retry window is hard-coded separately
+> somewhere else. Seven days is enough with the current settings, but if someone extends
+> the retry window later, this query may stop loading enough data. Could we add a comment
+> about that, or read both values from one place?
+
+Result-first:
+
+> Records older than seven days can disappear from this result, if the retry window is
+> ever set to more than seven days. The query window and the retry window are hard-coded
+> in two places, so they can get out of sync.
+>
+> Could they read the same value from one place?
+
+Notice what this comment does **not** say. It does not say that retries are dropped or
+records are lost, because the evidence does not show either one. This is a maintainability
+concern that depends on a future change, so it is a `nit` unless the retry window is really
+expected to change. Keep the claim this small. The result it states is the strongest one
+the evidence supports.
 
 ## 3. Serve + wait
 
@@ -582,12 +784,13 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
       "lineStart": 13,
       "lineEnd": 15,
       "side": "RIGHT",
-      "body": "This line now throws when the date can't be parsed. Before this change the same input quietly returned an empty string, so this is a correctness risk for code that already calls formatDate.\n\nAny caller that passes bad input and expects '' back will now get an exception instead, and most of them won't be wrapped in a try/catch, because until now there was nothing to catch.\n\nFor example, a page rendering a record with a missing date used to show a blank cell. Now it fails while rendering that cell.\n\nCould we return '' here instead, matching the existing !d branch a few lines above?",
+      "body": "A page can now fail while rendering a record with an unparseable date, where it used to show a blank date cell.\n\nFor that same input, formatDate previously returned an empty string; the new branch throws instead. Callers had nothing to catch before this change, so most of them are not wrapped in a try/catch and will not handle it.\n\nCould we return '' here, matching the existing !d branch a few lines above?",
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": true,
       "severity": "important",
-      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior."
+      "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
+      "disproof": "Render a record with an unparseable date through the page path this concern names. If the page still renders, or that input cannot reach formatDate, the concern is wrong."
     },
     {
       "id": "a-3",

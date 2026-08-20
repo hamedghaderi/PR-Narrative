@@ -19,22 +19,22 @@ description: >
 
 # PR Narrative
 
-Most PR descriptions are written for the author, not the reviewer. They list which
-files changed and restate the diff in prose, information the reviewer can already
-see. The result is a wall of text that adds no understanding.
+Most PR descriptions are written for the author, not the reviewer. They list which files
+changed and repeat the diff in words, which the reviewer can already see. The result is a
+long block of text that helps nobody understand anything.
 
-PR Narrative is a translator between the person who wrote the code and everybody
-else who needs to understand the change: reviewers, QA, and teammates new to the
-code. A *good* PR description gives the reader the context and the mental model
-they need **before** they read a single line of the diff. It answers "why does
-this change exist?" and "what changed?", using a clear before/after picture, small
-examples, and comparisons, because those compress understanding far better than
-paragraphs or a mermaid box-and-arrow blob.
+PR Narrative is a translator between the person who wrote the code and everybody else who
+needs to understand the change: reviewers, QA, and teammates who are new to the code. A
+*good* PR description gives the reader the context and the mental model they need
+**before** they read a single line of the diff. It answers "why does this change exist?"
+and "what changed?", using a clear before/after picture, small examples, and comparisons.
+Those explain far more per line than paragraphs of prose or a mermaid box-and-arrow
+diagram.
 
-The two-layer doctrine drives every mode below: **human explanation first,
-technical explanation last.** Lead with a plain-language story anyone on the team
-can follow; only once that story is told does the technical layer get to name a
-class, a file, or a method. Never the other way around.
+The two-layer rule shapes every mode below: **human explanation first, technical
+explanation last.** Start with a plain story anyone on the team can follow. Only after
+that story is told may the technical layer name a class, a file, or a method. Never the
+other way around.
 
 That's **author mode**: it mirrors the look and feel of the `explain-diff` skill's
 narrative and intuition sections, shaped for a PR.
@@ -73,10 +73,10 @@ Where each first token goes:
 Match the token as written: lowercase and hyphenated. A near miss like `security-review`
 or `Summarize` is free prose, so it falls through like anything else.
 
-**An explicit subcommand is the escape hatch.** The escape-hatch rule below (a user who
-names the mode in this same turn gets no question) covers this case too: naming
-`explain`, `review-security`, or `summarize-changes` **skips the mode question**
-entirely. Do not ask it. The user already answered it by picking a subcommand.
+**Naming a subcommand is the shortcut.** The shortcut rule below (a user who names the mode
+in the same message gets no question) covers this case too. Naming `explain`,
+`review-security`, or `summarize-changes` **skips the mode question** completely. Do not
+ask it. The user already answered it by choosing a subcommand.
 
 ### Explain subcommand
 
@@ -109,15 +109,15 @@ read, and do not silently fall back to something the user never asked for.
 5. **One concrete example**, when the change is non-trivial.
 6. **What this does not change, and any trade-offs** worth knowing.
 
-Follow the **Writing style** section below to the letter: story doctrine, every claim
-sourced from the code rather than the ticket, no identifiers above the technical layer,
-and no em dashes anywhere. The measurable bar: "A reader should understand the problem
-and expected behavior without opening the diff." If they need the code to understand
-the story, PR-Narrative failed.
+Follow the **Writing style** section below exactly: tell it as a story, take every claim
+from the code rather than the ticket, keep identifiers out of the human layer, use simple
+English, and never use em dashes. The target you can check: "A reader should understand
+the problem and the expected behavior without opening the diff." If they need the code to
+follow the story, PR-Narrative failed.
 
-One contrast worth naming: for a full standalone teaching document with a code
-walkthrough and a quiz, that's the separate `explain-diff` skill, not this subcommand.
-`explain` is a conversation, not an artifact.
+One difference worth naming: if the user wants a full standalone teaching document with a
+code walkthrough and a quiz, that is the separate `explain-diff` skill, not this
+subcommand. `explain` is a conversation, not a file.
 
 ### Review-security subcommand
 
@@ -143,18 +143,17 @@ skill never submits a verdict, and a local-path review posts nothing anywhere.
 **not** a review loop, **not** a PR body, and **not** a file. Nothing is written to disk
 and nothing is served.
 
-Resolve the input exactly as the **Explain subcommand** does: a PR URL or `#N` goes
-through the same read-only `gh` reads, anything else is the local branch against its base,
-and a missing or unauthenticated `gh` gets the same plain-spoken fallback offer. The
-commands aren't repeated here on purpose; there is one set of input rules and it lives
-just above.
+Resolve the input exactly as the **Explain subcommand** does. A PR URL or `#N` goes through
+the same read-only `gh` reads. Anything else is the local branch compared against its base.
+If `gh` is missing or not authenticated, offer the same plain fallback. The commands are
+not repeated here on purpose: there is one set of input rules and it sits just above.
 
-**What the message looks like:** the hallway sentence, then a short bullet list of what
+**What the message looks like:** the one-sentence summary, then a short bullet list of what
 changed **per concern**, not per file (one bullet for "retries now back off", not one
-bullet per touched file), then notable risks or trade-offs if there are any. A few lines
-total. If the change is trivial, a single paragraph is a correct and sufficient answer;
-padding it out is a defect. Same style rules as `explain`: plain words, concrete toy data,
-no identifiers, a summary never needs the technical layer, no em dashes.
+bullet per changed file), then any notable risks or trade-offs. A few lines in total. If
+the change is small, one paragraph is a correct and complete answer, and padding it out is
+a defect. Same style rules as `explain`: simple English, plain words, small concrete
+numbers, no identifiers, no technical layer, no em dashes.
 
 ## Which mode? (decide this first)
 
@@ -170,9 +169,8 @@ sentence each and mark the inferred mode as recommended:
 Mark whichever mode fits the request as **[recommended]** and offer both as numbered
 options.
 
-**Escape hatch**: if the user has explicitly named the mode in this same conversation
-turn (e.g. "use author mode", "reviewer mode please"), skip the question and proceed
-directly.
+**Shortcut**: if the user already named the mode in this same message (for example "use
+author mode" or "reviewer mode please"), skip the question and go straight to work.
 
 **Inference rules** (for picking the recommended option):
 
@@ -190,30 +188,28 @@ directly.
 ### What you produce: an interactive review page + a Markdown body
 
 1. **An interactive HTML review page** (`/tmp/YYYY-MM-DD-pr-review-<branch>.html`):
-   self-contained, inline CSS/JS, no server. This is the centerpiece and it **opens
-   automatically in the browser**. It holds the *rich visual* (report-quality
-   before/after panels, colored request rows, a red failure, an "extract" step,
-   little file chips, plus the human-first narrative: the one-sentence summary, the
-   problem story, before/after, example, QA guidance, and the technical layer,
-   exactly the look people love from `explain-diff`), and on top of that, each section carries an
-   **Approve / Request-change** control and a comment box, with a **Download
-   decisions** button. The user reviews section by section right in the page. Build
-   the visuals the same way `explain-diff` does: one clean page, styled panels, **no
-   mermaid, no ASCII diagrams**.
+   self-contained, inline CSS/JS, no server. This is the main artifact, and it **opens
+   automatically in the browser**. It holds the *rich visual*: before/after panels of
+   report quality, colored request rows, a red failure, an "extract" step, and small file
+   chips. It also holds the human-first narrative: the one-sentence summary, the problem
+   story, before/after, an example, QA guidance, and the technical layer. This is the same
+   look as `explain-diff`. On top of that, each section carries an **Approve /
+   Request-change** control and a comment box, with a **Download decisions** button. The
+   user reviews section by section, right in the page. Build the visuals the way
+   `explain-diff` does: one clean page, styled panels, **no mermaid, no ASCII diagrams**.
 
-2. **A Markdown PR body** (`/tmp/pr-body-<branch>.md`): GitHub-flavored, fills the
-   repo's PR template, and is *complete on its own*: a reviewer who never opens the
-   HTML still gets the full narrative from the Markdown, using GitHub callouts and
-   comparison tables. It is **self-contained for GitHub**: body only, and never links
-   to the local review page or any `/tmp` path, since neither exists for a reader on
-   github.com.
+2. **A Markdown PR body** (`/tmp/pr-body-<branch>.md`): GitHub-flavored, fills the repo's
+   PR template, and is *complete on its own*. A reviewer who never opens the HTML still
+   gets the full story from the Markdown, using GitHub callouts and comparison tables. It
+   must work alone on GitHub: body only, and never a link to the local review page or to
+   any `/tmp` path, because neither one exists for a reader on github.com.
 
-Do **not** run `gh pr create` or open a PR; this skill produces (and helps the user
-review) the description; the user decides when to open the PR.
+Do **not** run `gh pr create` or open a PR. This skill writes the description and helps
+the user review it. The user decides when to open the PR.
 
 ### The review loop (this is the point of author mode)
 
-Author mode is not "generate and done"; it's a loop:
+Author mode does not generate once and stop. It is a loop:
 
 **generate → auto-open review page → user approves/requests changes per section →
 user clicks Download decisions → agent reads the decisions file → revises the
@@ -239,15 +235,15 @@ callout syntax, tables, template filling) read `references/markdown-body.md`.
   document with a code walkthrough and a quiz, that's `explain-diff`. If the user
   wants to actually review a diff and leave comments, that's reviewer mode below.
 
-The most common failure mode is drifting into a file-by-file "I changed X in Y, then
-refactored Z" listing, or dumping method names ("`downloadSourceFilesInBulk()`
-groups the files…") anywhere above `## Technical details`. The diff already shows
-the *what* and the *where*; sections 1 through 9 of the body (see
-`references/markdown-body.md`) owe the reader the *why* and the *idea*, at the
-level of concepts, never identifiers. `## Technical details`, section 10, is the
-only place identifiers are sanctioned, and even there the same discipline holds: no
-file-by-file changelog, no diff restatement, no "then I refactored X" narration,
-only the identifiers a concept-level sentence genuinely couldn't carry.
+The most common mistake is slipping into a file-by-file list, like "I changed X in Y, then
+refactored Z". The second most common is putting method names ("`downloadSourceFilesInBulk()`
+groups the files…") anywhere above `## Technical details`. The diff already shows *what*
+changed and *where*. Sections 1 through 9 of the body (see `references/markdown-body.md`)
+owe the reader the *why* and the *idea*, as concepts, never as identifiers.
+`## Technical details`, section 10, is the only place identifiers are allowed. The same
+rule still applies there: no file-by-file changelog, no repeating the diff, no "then I
+refactored X" narration. Use only the identifiers that a concept-level sentence cannot
+carry.
 
 ### The workflow
 
@@ -285,10 +281,10 @@ question onto a body section is defined in `references/markdown-body.md`):
 7. What should QA verify?
 8. What does this PR deliberately NOT solve?
 
-If you can't answer these, you don't understand the change yet; go back to step 1. And
-if your answers sound like the ticket, you haven't understood the change; you've only
-read about it. If you cannot write `## In one sentence` without a class name or
-architecture jargon, you do not understand the PR yet.
+If you cannot answer these, you do not understand the change yet. Go back to step 1. If
+your answers sound like the ticket, you have only read about the change. If you cannot
+write `## In one sentence` without a class name or architecture jargon, you do not
+understand the PR yet.
 
 #### 3. Write the Markdown body, build the review page, serve it, and open it
 
@@ -430,57 +426,65 @@ See `references/review-ui.md` for the decisions schema and the exact behavior.
 
 ### Writing style
 
-Write with the clarity and flow of a good technical essayist: engaging, plain, with
-smooth transitions. Picture the target reader precisely: assume the reader has never
-seen this feature before, does not know the architecture, does not know the business
-terminology, and can read basic code but should not need to read code to understand
-the PR. Plain does not mean dumbed down: keep every technical fact, put it in its
-layer. Respect the reader's time: every sentence should give understanding they
-lacked. The bar is measurable, not a feeling: "A reader should understand the
-problem and expected behavior without opening the diff." If they need the code to
-understand the story, PR-Narrative failed.
+Write clearly and simply, the way a good technical writer explains something to a
+colleague. Picture your reader. They have never seen this feature. They do not know the
+architecture. They do not know the business words your team uses. They can read code, but
+they should not need to read the code to understand the PR.
 
-- **Tell it as a story, not a summary.** Background is a scene: what someone does
-  today, what concretely goes wrong for them, and why that hurts. Not a restatement
-  of the ticket. The Description opens with the one idea that fixes it, in one plain
-  sentence, then shows how life looks after. A reader should be able to retell the
-  change to a colleague after a single read.
-- **Source every claim from the code, not the ticket.** Everything you write in
-  Background or Description has to trace back to the diff or to code behavior you
-  actually observed. Ticket text, issue text, and anything the author told you exist
-  for fact-checking only; read them to confirm you understood the problem, never
-  paraphrase them into the prose. If you catch yourself re-wording the ticket, delete
-  the sentence and re-derive it from the code instead.
-- **Favor a few short paragraphs over hard caps.** There's no word-count limit here on
-  purpose. One idea per paragraph, and if a reader would need to reread a
-  sentence, rewrite it. A section that can be one line should be one line. A wall of
-  text is a defect even when every sentence in it is true.
-- **Reach for plain words first.** Prefer everyday language over jargon; when jargon
-  is unavoidable, define it in half a sentence, inline, right where it appears.
-- **Lead with the point.** The first two sentences of Background make the problem
-  obvious. The first sentence of the Description is the one-sentence summary.
-- **Concrete toy data over abstractions.** "30 sequential requests → HTTP 429" beats
-  "many requests were made".
-- **Show, don't tell.** The styled before/after visual and a comparison table beat
-  three descriptive paragraphs.
-- **Two layers, in order.** Human explanation first, technical explanation last,
-  never the reverse: tell the whole story in plain language before a single
-  identifier appears.
-- **Ideas above, identifiers below.** Sections above `## Technical details` explain
-  what happens conceptually; method names, classes, and file paths live only in
-  `## Technical details`, and only where a plain sentence can't carry the meaning.
-- **Answer the eight questions.** Before writing, work through the checklist in
-  step 2 above; if the answers sound like the ticket, you've only read about the
-  change.
-- **Be honest about limits.** A noted trade-off or edge case builds trust and saves
-  review round-trips.
-- **Cut anything the diff already says.** If a sentence just restates the diff, delete
-  it unless the *reason* is interesting.
+Simple does not mean less technical. Keep every technical fact, and put each fact in the
+right layer. Every sentence should tell the reader something they did not know before. The
+target is easy to check: "A reader should understand the problem and the expected behavior
+without opening the diff." If they need the code to follow the story, PR-Narrative failed.
+
+- **Use simple English.** Write so that a developer with strong technical skills but
+  weaker English understands the text on the first read. Use common words. Use short
+  sentences. If one sentence holds two ideas, make it two sentences. Avoid idioms,
+  metaphors and clever phrasing. **Keep real technical names**: class names, method names,
+  field names, database terms and framework concepts. Never swap a precise technical term
+  for a vague one. This rule is about difficult English, not about technical depth. Before
+  you finish a section, ask yourself: could a developer who is not a native English speaker
+  read this once and understand it? Is there a simpler common word? Is any sentence too
+  long?
+- **Tell it as a story, not a summary.** The background is a small scene: what someone
+  does today, what goes wrong for them, and why that is a problem. Do not repeat the
+  ticket. The description starts with the one idea that fixes it, in one plain sentence,
+  and then shows what is different afterwards. After one read, the reader should be able
+  to explain the change to a colleague.
+- **Take every claim from the code, not the ticket.** Everything in the background and the
+  description must come from the diff, or from code behavior you actually observed. Ticket
+  text, issue text, and anything the author told you are for checking facts only. Read them
+  to confirm you understood the problem. Never copy their wording into your text. If you
+  notice that you are rewording the ticket, delete the sentence and write it again from the
+  code.
+- **Prefer a few short paragraphs. There is no word limit, on purpose.** One idea per
+  paragraph. If the reader would need to read a sentence twice, rewrite it. A section that
+  fits in one line should be one line. A very long block of text is a defect, even when
+  every sentence in it is true.
+- **Use plain words first.** Prefer everyday language over jargon. When you must use a
+  technical term, explain it in half a sentence, right where it appears.
+- **Put the point first.** The first two sentences of the background make the problem
+  clear. The first sentence of the description is the one-sentence summary.
+- **Use small, concrete numbers instead of vague words.** "30 sequential requests → HTTP
+  429" is better than "many requests were made".
+- **Show it instead of describing it.** A styled before/after visual and a comparison
+  table work better than three paragraphs of description.
+- **Two layers, in order.** Human explanation first, technical explanation last. Never the
+  other way around. Tell the whole story in plain language before the first identifier
+  appears.
+- **Ideas above, names below.** Sections above `## Technical details` explain what
+  happens. Method names, class names and file paths belong only in `## Technical details`,
+  and only where a plain sentence cannot carry the meaning.
+- **Answer the eight questions.** Before writing, go through the checklist in step 2
+  above. If your answers sound like the ticket, you have only read about the change.
+- **Be honest about limits.** Naming a trade-off or an edge case builds trust and saves
+  review rounds.
+- **Cut anything the diff already says.** If a sentence only repeats the diff, delete it,
+  unless the reason behind it is interesting.
 - **Never use em dashes.** No `—` anywhere in generated prose, and no `&mdash;` entity
-  either. Reach for the punctuation that actually fits: a colon to introduce, a
-  semicolon to join two independent clauses, a comma for a short aside, parentheses for
-  a true aside, or a full stop to split the sentence in two. Em dashes read as
-  machine-written and undercut the credibility of everything around them.
+  either. Use the punctuation that fits: a colon to introduce, a semicolon to join two full
+  clauses, a comma for a short aside, brackets for a true aside, or a full stop to split
+  the sentence in two. Em dashes look machine-written and make the text around them less
+  believable.
 
 ### Quality bar: author mode
 
@@ -494,22 +498,24 @@ Re-read both artifacts as if you were the reader:
   staying at the concept level?
 - Does `## What QA should test` (or the mapped equivalent) name observable
   behaviors a QA person could execute, without referencing test files or code?
-- Is `## What this does not change` present and truthful, actually limiting the
-  blast radius rather than restating what changed?
-- Does the review page have a genuinely helpful styled before/after visual (not
-  decoration), and does every reviewable section have its Approve / Request-change
-  control bar wired up?
-- Does the review page actually open in the browser, and does Download decisions
-  export valid `pr-review-decisions.json`?
-- Is the Markdown body complete on its own, with no local links (no review-page,
-  `localhost`, or `/tmp` references) that would dangle for a reader on github.com?
-- Is the main trade-off named honestly?
-- Does it fit the repo's template and title conventions (conventional-commit title,
-  `[Internal]` when it shouldn't hit release notes)?
-- Is every claim traceable to the diff or code behavior, not to the ticket, commit
-  message, or what the author told you?
-- Could a reader understand the problem and the expected behavior without opening
-  the diff? If they need the code to follow the story, the body failed.
+- Is `## What this does not change` present and true? Does it really limit what was
+  touched, instead of repeating what changed?
+- Does the review page have a before/after visual that actually helps, not just
+  decoration? Does every reviewable section have a working Approve / Request-change
+  control bar?
+- Does the review page open in the browser, and does Download decisions produce a valid
+  `pr-review-decisions.json`?
+- Is the Markdown body complete on its own? It must have no local links: no review-page,
+  `localhost`, or `/tmp` references, which would be broken for a reader on github.com.
+- Is the main trade-off stated honestly?
+- Does it match the repo's template and title conventions (conventional-commit title,
+  `[Internal]` when the change should stay out of release notes)?
+- Does every claim come from the diff or from code behavior, rather than from the ticket,
+  the commit message, or what the author told you?
+- **Could a developer who is not a native English speaker read this once and understand
+  it? Are the sentences short, and the words common?**
+- Could a reader understand the problem and the expected behavior without opening the
+  diff? If they need the code to follow the story, the body failed.
 
 If any answer is "no", fix it before delivering.
 
@@ -546,13 +552,13 @@ understand:
 - **Local path**: diff against the base branch the same way author mode does
   (`git diff --stat <base>...HEAD`, `git log --oneline <base>..HEAD`, read the
   actual changed code).
-- For non-trivial or multi-module PRs, fire `explore` agents in parallel to map the
-  before/after and call sites, exactly as in author mode. Write the same short
-  human-first narrative (the one-sentence summary and the problem story), following
-  the exact same story doctrine as author mode's Writing style (code-first
-  sourcing, the reader model, story arc) rather than restating it here. It becomes
-  the collapsible narrative panel at the top of the annotation page (styled the
-  same as author mode's panels).
+- For large or multi-module PRs, run `explore` agents in parallel to inspect the old code,
+  the new code, and the call sites, exactly as in author mode. Write the same short
+  human-first narrative (the one-sentence summary and the problem story). Follow author
+  mode's Writing style rules instead of repeating them here: take every claim from the
+  code, write for the same reader, tell it as a story, and use simple English. This
+  narrative becomes the collapsible panel at the top of the annotation page, styled the
+  same way as author mode's panels.
 
 ### 3. AI pre-seed (optional, capped, locked policy)
 
@@ -570,16 +576,27 @@ Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excl
 submission by default**, and only included if the user explicitly accepts it in the
 UI.
 
-Finding the problem is only half of it. **How each finding is worded is governed by
-`references/reviewer-ui.md` §2c**, which applies to the security variant too: write for
-someone who has never opened this part of the codebase, open with the problem in plain
-English, then say what goes wrong, then give an example if it helps, then suggest a
-change or ask a clear question. Class and method names are supporting evidence, so they
-come after the plain sentence rather than in place of it. Length tracks severity: an
-`important` finding gets short paragraphs, a `nit` gets one or two sentences. Say in
-words which kind of concern it is (a correctness bug, a possible inconsistency, a
-performance issue, a maintainability concern, a cosmetic improvement) without inflating
-it, and leave `severity` itself at the three values the schema allows.
+Finding the problem is only half of it. **Before you write any AI comment `body`, read and
+follow `references/reviewer-ui.md` §2c.** It is the single source of truth for order,
+length, evidence, simple English, and how to describe a failure in background work. The
+same rules apply to `review-security`.
+
+This file does not repeat those rules on purpose. Repeating them here would let the two
+files disagree over time. Read §2c instead.
+
+Two rules are worth stating twice:
+
+- **Start with what goes wrong for a person, not with what is wrong in the code.** Do this
+  only when the evidence supports a result. When it does not, §2c tells you to say the
+  smallest thing you can prove, then mark the finding `nit` or drop it. Never invent an
+  effect.
+- **Use simple English.** Write so a developer with strong technical skills but weaker
+  English understands the comment on the first read. Short sentences, common words, no
+  idioms. Keep real technical names exactly as they are.
+
+None of this changes the locked pre-seed policy above. Do not add categories. Comment only
+on changed lines. Do not raise the caps, add values to the `severity` enum, change the
+zero-findings outcome, or leave out the required `disproof` on an `important` finding.
 
 ### 4. Build the page, serve it, and wait
 
@@ -675,21 +692,31 @@ done
 
 - Every comment's anchor validated against the real hunks before it was posted or
   fix-listed; no bad-anchor `422`s reaching GitHub.
-- AI drafts, if seeded, stayed inside the caps (≤3/file, ≤10/review), each carries
-  a severity and a reason, and every one is visually distinct from user comments in
-  the page; never indistinguishable, never silently pre-accepted.
-- Every `important` AI draft carries a `disproof` that is a real check the author
-  could run, not a restatement of the concern. Any finding you couldn't falsify was
-  demoted or dropped rather than shipped with an invented test.
-- Every AI draft body clears the §2c bar: its first sentence makes sense without
-  opening another file, the problem is stated before the technical proof, it describes
-  behavior that can really happen rather than restating the code, and any relationship
-  between two files or classes is explained rather than assumed. Read each one as
-  someone seeing this code for the first time; if you have to reconstruct the argument
-  to follow it, rewrite it before serving the page.
-- No draft is longer than its severity earns, and none is dressed up as more serious
-  than it is. A `nit` that runs four paragraphs is as much a defect as an `important`
-  finding compressed into an unexplained phrase.
+- If you seeded AI drafts, they stayed inside the caps (≤3/file, ≤10/review). Each one
+  has a severity and a reason. Each one looks clearly different from a user comment on
+  the page. None was accepted for the user.
+- Every `important` AI draft has a `disproof` the author can actually run. It does not
+  just repeat the concern. It tests **the same result, in the same part of the system,
+  that the body named**: if the body says a page can fail, showing that a helper throws
+  is not enough. Any finding you could not test was marked `nit` or dropped, never
+  shipped with an invented check.
+- Every AI draft body meets the §2c bar. The test that catches the most mistakes:
+  **does the first sentence say what goes wrong for a person, rather than what is wrong
+  with the code?** "These two paths filter differently" fails. "The two pages can show
+  different counts" passes. Then check four more things. The first sentence makes sense
+  without opening another file. The technical proof comes after the result instead of
+  replacing it. The comment describes behavior that can really happen instead of
+  repeating the code. Any link between two files or classes is explained, not assumed.
+- Every AI draft body uses simple English, as §2c requires. Short sentences, common
+  words, no idioms, real technical names kept exactly. Read each one as a developer who
+  is not a native English speaker: if it takes two reads, rewrite it before serving the
+  page.
+- No result was invented to follow the order. Where you could prove only a mechanism,
+  the draft says only that, and it was marked `nit` or dropped per §2c instead of being
+  given an effect nobody traced.
+- No draft is longer than its severity needs, and none sounds more serious than it is. A
+  four-paragraph `nit` is a defect. So is an `important` finding squeezed into a phrase
+  that explains nothing.
 - For PR mode, the response after posting actually contains `"state": "PENDING"`;
   if it doesn't, stop and work through the error table in
   `references/github-posting.md` before telling the user it's done.

@@ -1,15 +1,15 @@
 # Interactive review UI: the approve/reject HTML
 
-This is what makes the skill *interactive* rather than a static write-up. The page
+This page lets the user review each section, instead of reading one fixed document. It
 shows a **section-by-section review**: each part of the PR gets **Approve / Request
-change** buttons and a comment box. When the reviewer is done they click **Submit**,
-and their decisions come straight back to the agent.
+change** buttons and a comment box. When the reviewer is done they click **Submit**, and
+their decisions go straight back to the agent.
 
 ## The round-trip (how decisions come back)
 
-The primary path is a **live local server** (`scripts/review_server.py`) so there's no
-manual download/hand-back step. The page also keeps a **Download-decisions fallback**
-so it still works if opened without the server.
+Normally the page uses a **live local server** (`scripts/review_server.py`), so nobody has
+to download a file and hand it back. If the page is opened without the server, a
+**Download-decisions** button still works.
 
 **Live mode (primary):**
 
@@ -56,8 +56,8 @@ Each reviewable section has a stable `id`. The exported file looks like:
 }
 ```
 
-The agent should treat `changes_requested` sections as the work list, apply the
-comments, and leave `approved` ones untouched.
+The agent should revise every section marked `changes_requested`, apply the comments, and
+leave the `approved` sections unchanged.
 
 The page's **Copy PR description** button (see below) is outside this contract: it
 copies the embedded Markdown body to the clipboard and contributes nothing to the
@@ -82,9 +82,8 @@ in `references/markdown-body.md`, so each `<section>` matches one generated sect
 <section class="review-section" data-review-id="problem" data-review-label="The problem">
   <h2>The problem</h2>
   <!-- the actual generated The problem prose / callouts go here -->
-  <p>The Incoming Requests page could only filter by status, method, and a coarse
-     period, so support engineers had to export to Excel to answer even simple
-     customer questions.</p>
+  <p>The Requests page could only filter by status and a rough date range, so users
+     had to export the results to a spreadsheet to answer even simple questions.</p>
 
   <!-- control bar (identical markup for every section; JS wires it up) -->
   <div class="review-bar">
@@ -237,7 +236,7 @@ other. Include it as-is:
 </script>
 ```
 
-Three details that are load-bearing, not style:
+Three details that are required for this to work:
 
 - **`writeText` is called synchronously inside the handler.** The promise it returns may
   resolve later, but the call itself has to happen while the click's transient user
@@ -395,16 +394,16 @@ exported more than once).
 
 Then, regardless of mode:
 
-1. If `overall` is `approved`, finalize the Markdown body **verbatim** as approved and
-   hand it over. No post-approval edits: not a reworded sentence, not a tightened
-   heading. The reviewer approved a specific text, and the copy button on the page they
-   approved put that exact text on their clipboard; changing it afterwards would mean
-   the clipboard and the "final" body disagree, silently. The last served page's Copy
-   PR description button always yields the final text.
-2. Otherwise, for each section with `decision: "changes_requested"`, revise that
-   section per its `comment`, leave approved sections untouched, regenerate the
-   Markdown body and (if the visual changed) the review page, restart the server, and
-   re-open it for another pass. Repeat until `overall` is `approved`.
+1. If `overall` is `approved`, deliver the Markdown body exactly as approved. Do not edit
+   it afterwards: do not reword a sentence and do not change a heading. The reviewer
+   approved one specific text, and the copy button on that page put that same text on
+   their clipboard. If you change it now, the clipboard and the "final" body will differ,
+   and nobody will be told. The Copy PR description button on the last page served always
+   gives the final text.
+2. If it is not approved, revise each section marked `decision: "changes_requested"`, using
+   its `comment`. Leave the approved sections unchanged. Regenerate the Markdown body, and
+   the review page if the visual changed. Restart the server and open the page again.
+   Repeat until `overall` is `approved`.
 
 This is the loop: **generate → serve + open → review → submit → revise → re-serve → …**
 until the user approves everything.

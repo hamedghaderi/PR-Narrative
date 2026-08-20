@@ -1,10 +1,9 @@
 # Styled HTML visual: CSS, panels, and worked example
 
-This is the artifact that gives a PR the look people love: real HTML/CSS before/after
-panels with colored request rows, a red failure, an "extract locally" step, and
-little file chips. Build it as a single self-contained `.html` file with inline CSS,
-saved to `/tmp/YYYY-MM-DD-pr-<branch>.html`. No mermaid, no ASCII art; use the HTML
-below.
+This file builds the styled HTML page for a PR: real HTML and CSS before/after panels with
+colored request rows, a red failure, an "extract locally" step, and small file chips. Build
+it as one self-contained `.html` file with inline CSS, saved to
+`/tmp/YYYY-MM-DD-pr-<branch>.html`. No mermaid and no ASCII art. Use the HTML below.
 
 All the example content here uses a generic, invented scenario (batching image
 downloads through a CDN bundle endpoint) purely to illustrate the shape. Replace it
@@ -22,9 +21,9 @@ with the actual change you're documenting.
 
 ## 1. Page skeleton + base CSS
 
-Keep it one clean page: a title, the human-first narrative sections, the styled before/after
-visual, then the Description narrative. This palette leans on GitHub's own colors so
-the panels feel native when screenshots land in a PR.
+Keep it to one clean page: a title, the human-first narrative sections, the styled
+before/after visual, then the Description narrative. These colors are GitHub's own colors,
+so the panels match GitHub when someone puts a screenshot in a PR.
 
 ```html
 <!DOCTYPE html>
@@ -58,8 +57,9 @@ the panels feel native when screenshots land in a PR.
 
 ## 2. Before/after panel components
 
-The heart of the visual. Two panels side by side: the old path (requests failing) and
-the new path (one bulk request, extract, chips). Put concrete toy data in every row.
+This is the main part of the visual. Two panels side by side: the old way (requests
+failing) and the new way (one bulk request, extract, chips). Put small concrete numbers in
+every row.
 
 ```html
 <style>
@@ -98,7 +98,7 @@ the new path (one bulk request, extract, chips). Put concrete toy data in every 
       <div class="req-row"><span class="path">GET <b>shoes/img-001</b>.jpg</span><span class="badge badge-200">200</span></div>
       <div class="req-row"><span class="path">GET <b>shoes/img-002</b>.jpg</span><span class="badge badge-200">200</span></div>
       <div class="req-row"><span class="path">GET <b>shoes/img-003</b>.jpg</span><span class="badge badge-429">429</span></div>
-      <div class="note-inline">Rate limited: rebuild throws, remaining images never requested</div>
+      <div class="note-inline">Rate limit reached: the rebuild fails, and the remaining images are never requested</div>
       <div class="req-row dim"><span class="path">GET <b>shoes/img-004</b>.jpg</span><span class="badge badge-skip">skipped</span></div>
       <div class="req-row dim"><span class="path">… more never attempted</span></div>
     </div>
@@ -108,13 +108,13 @@ the new path (one bulk request, extract, chips). Put concrete toy data in every 
     <div class="panel-head after">After: one GET per category folder</div>
     <div class="panel-body">
       <div class="req-row"><span class="path">GET <b>/shoes</b>?bundle</span><span class="badge badge-200">200 → shoes.zip</span></div>
-      <div class="step-box"><div class="arrow-in">↓</div>Unpack locally, no further network calls</div>
+      <div class="step-box"><div class="arrow-in">↓</div>Unpack the archive locally. No more network requests.</div>
       <div class="chips">
         <span class="chip">img-001.jpg</span><span class="chip">img-002.jpg</span>
         <span class="chip more">+40 more matched</span>
         <span class="chip miss">img-019.jpg (missing)</span>
       </div>
-      <div class="fallback-box"><b>Fallback (1 image):</b> not in the archive → individual download, same as before.</div>
+      <div class="fallback-box"><b>Fallback (1 image):</b> it is not in the archive, so we download it on its own, the same as before.</div>
     </div>
   </div>
 </div>
@@ -124,7 +124,7 @@ the new path (one bulk request, extract, chips). Put concrete toy data in every 
 
 ## 3. Callout components (Note / Tip)
 
-Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
+Use the same callout types as GitHub, so the HTML and the Markdown look the same.
 
 ```html
 <style>
@@ -135,12 +135,12 @@ Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
 </style>
 
 <div class="callout"><b>Note</b>
-  Bundle mode only kicks in once a job asks for more than a couple of images, so the
-  single-page path is untouched.
+  Bundle mode starts only when a job asks for more than two images, so single-page
+  behavior does not change.
 </div>
 <div class="callout tip"><b>Tip</b>
-  A missing image or a failed bundle falls back to an individual download. Worst case,
-  no worse than before.
+  If an image is missing, or the bundle fails, we download that image on its own. In the
+  worst case the result is the same as before.
 </div>
 ```
 
@@ -158,7 +158,7 @@ Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
   <tr><th>Scenario</th><th>Requests before</th><th>Requests after</th></tr>
   <tr><td>Single product page (1 image)</td><td>1</td><td>1 (unchanged)</td></tr>
   <tr><td>Category rebuild (45 images)</td><td>45</td><td>1</td></tr>
-  <tr><td>Supplier import (3 folders)</td><td>~135</td><td>3</td></tr>
+  <tr><td>Multi-folder job (3 folders)</td><td>~135</td><td>3</td></tr>
 </table>
 ```
 
@@ -166,7 +166,7 @@ Mirror GitHub's callouts so the HTML and the Markdown feel consistent.
 
 ## 5. Full worked example
 
-A complete, self-contained HTML file for the generic thumbnail-batching change lives
-alongside this reference at `examples/pr-thumbnails.html`; open it in a browser to see
-the target quality bar (narrative + styled before/after, no mermaid, no method dumps).
-Copy its structure and swap in the real change you're documenting.
+A complete, self-contained HTML file for the generic thumbnail-batching change sits next to
+this reference at `examples/pr-thumbnails.html`. Open it in a browser to see the quality
+you should aim for: narrative plus a styled before/after, no mermaid, and no lists of
+method names. Copy its structure and put the real change in its place.

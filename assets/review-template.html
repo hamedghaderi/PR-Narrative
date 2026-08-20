@@ -310,6 +310,9 @@
   var speechUtterance = null;      // strong ref: a collected utterance stops mid-word
   var speechSpeaking = false;      // "the queue is running", the Stop control's source
   var speechRun = 0;               // bumped on cancel; stale end/error handlers no-op
+  var speechVoice = null;          // best voice found, or null for "browser default"
+  var speechVoicePicked = false;   // true once a non-empty voice list was actually scored
+  var speechVoiceBound = false;    // the voiceschanged listener is registered once
   var qaCounter = 0;
   var qaState = "active";          // "active" | "ended" (server gone) | "stale" (409)
   var qaPollTimer = null;
@@ -1182,6 +1185,23 @@
     if (open) open.remove();
   }
 
+  // Shared by both speech directions. A region-carrying tag is preferred because a
+  // bare primary subtag ("en") leaves the engine to guess a locale, while "en-US"
+  // names one; navigator.language reflects the person, document lang only the page.
+  function qaSpeechLang() {
+    var tags = [];
+    if (typeof navigator === "object" && navigator && typeof navigator.language === "string") {
+      tags.push(navigator.language.trim());
+    }
+    var docLang = document.documentElement.lang;
+    if (typeof docLang === "string") tags.push(docLang.trim());
+    tags = tags.filter(function (t) { return !!t; }).map(function (t) { return t.replace(/_/g, "-"); });
+    for (var i = 0; i < tags.length; i++) {
+      if (tags[i].indexOf("-") > 0) return tags[i];
+    }
+    return tags.length ? tags[0] : "en-US";
+  }
+
   // ---- push-to-talk dictation (Web Speech API) ----
   // Chrome/Edge/Safari only. When the constructor is missing (Firefox) no mic
   // affordance is created at all, so that composer is the one that shipped before
@@ -1198,7 +1218,10 @@
     "service-not-allowed": "The browser blocked its speech service for this page. Allow microphone access, or type the question instead.",
     "no-speech": "No speech was detected. Press the mic and speak, or type the question instead.",
     "audio-capture": "No microphone was found. Connect one, or type the question instead.",
-    "network": "The speech service could not be reached. Check the connection, or type the question instead.",
+    // Chromium collapses every speech-backend failure onto this one code, including
+    // "this build ships the API with no service behind it", so it cannot be reported
+    // as a connectivity problem: that misdirects everyone on a fork without a backend.
+    "network": "Speech recognition is unavailable in this browser. This usually means the browser ships the API without a working speech service rather than a problem with your microphone or connection - Chrome, Edge and Safari normally work. Type the question instead.",
     "aborted": "Dictation stopped before anything was transcribed."
   };
 
@@ -1210,7 +1233,7 @@
   function ensureQaRecognition() {
     if (qaRecognition) return qaRecognition;
     var r = new SpeechRecognitionCtor();
-    r.lang = document.documentElement.lang || "en-US";
+    r.lang = qaSpeechLang();
     r.interimResults = false;   // final transcripts only: the reviewer edits text, not a stream
     r.continuous = false;       // push-to-talk, never an open conversation channel
     r.onresult = function (ev) {
@@ -1468,6 +1491,76 @@
     return out;
   }
 
+  // macOS installs these as ordinary English voices and a "first voice whose lang
+  // matches" heuristic picks them cheerfully. They are novelty effects, not speech.
+  var SPEECH_NOVELTY_VOICES = /\b(?:zarvox|bubbles|bad news|good news|boing|cellos|jester|organ|trinoids|wobble|whisper|albert|fred|deranged|hysterical|bahh|bells|superstar|junior|grandma|grandpa|eddy|flo|reed|rocko|sandy|shelley|kathy|ralph)\b/i;
+  // The only reliable signal for "this one does not sound like 1994" is the name.
+  var SPEECH_QUALITY_VOICES = /premium|enhanced|natural|neural/i;
+
+  function normalizeLangTag(tag) {
+    return typeof tag === "string" ? tag.replace(/_/g, "-").toLowerCase() : "";
+  }
+
+  // Picks the least robotic voice the browser will admit to having, or null to leave
+  // utterance.voice unset (i.e. exactly the pre-existing behaviour). Deliberately not
+  // user-configurable: there is no voice picker, this is the whole decision.
+  function qaPickVoice(voices, wantedLang) {
+    if (!voices || !voices.length) return null;
+    var wanted = normalizeLangTag(wantedLang) || "en-us";
+    var wantedPrimary = wanted.split("-")[0];
+    var best = null;
+    var bestScore = 0;
+    for (var i = 0; i < voices.length; i++) {
+      var v = voices[i];
+      if (!v || typeof v.name !== "string" || !v.name) continue;
+      if (SPEECH_NOVELTY_VOICES.test(v.name)) continue;
+      var lang = normalizeLangTag(v.lang);
+      var score;
+      if (lang && lang === wanted) score = 100;                                  // same locale
+      else if (wantedPrimary && lang.split("-")[0] === wantedPrimary) score = 40; // same language
+      else continue;                                     // another language: never spoken
+      // A name-based quality guess must not outrank an actual locale match.
+      if (SPEECH_QUALITY_VOICES.test(v.name)) score += 20;
+      // Chrome's network voices; this page is an offline-capable local tool, so a
+      // remote synthesiser is a dependency it should not acquire for read-aloud.
+      if (v.localService === false) score -= 30;
+      if (v.default) score += 1;   // Safari reports it for everything: tie-break only
+      // Strictly greater, so equal scores keep the earlier voice: stable by index.
+      if (!best || score > bestScore) { best = v; bestScore = score; }
+    }
+    return best;
+  }
+
+  // Resolved lazily, never at load: getVoices() is empty until the engine has built
+  // its list. An empty list is not cached, so a later utterance can still find one.
+  function pickedSpeechVoice(lang) {
+    if (speechVoicePicked) return speechVoice;
+    var synth = window.speechSynthesis;
+    // The API is feature-detected per call, not captured: getVoices() is absent on
+    // stand-ins for speechSynthesis and reading it blindly would throw.
+    if (!synth || typeof synth.getVoices !== "function") return null;
+    var voices;
+    try { voices = synth.getVoices(); } catch (e) { return null; }
+    if (!voices || !voices.length) return null;
+    speechVoice = qaPickVoice(voices, lang);
+    speechVoicePicked = true;
+    return speechVoice;
+  }
+
+  // voiceschanged only drops the cache; nothing is re-spoken and no queue is touched.
+  function bindSpeechVoiceRefresh() {
+    if (speechVoiceBound) return;
+    var synth = window.speechSynthesis;
+    if (!synth || typeof synth.addEventListener !== "function") return;
+    speechVoiceBound = true;
+    try {
+      synth.addEventListener("voiceschanged", function () {
+        speechVoice = null;
+        speechVoicePicked = false;
+      });
+    } catch (e) { /* best effort: a stale pick is still better than a throw */ }
+  }
+
   function speechSupported() {
     return !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
   }
@@ -1492,6 +1585,14 @@
     }
     var run = speechRun;
     var u = new SpeechSynthesisUtterance(text);
+    var lang = qaSpeechLang();
+    u.lang = lang;   // a hint the engine can use even when no voice object is set
+    bindSpeechVoiceRefresh();
+    var voice = pickedSpeechVoice(lang);
+    // Left unset when nothing suitable exists, which is the OS default: no regression.
+    // Guarded because the setter is typed: a patched getVoices() (an extension, a
+    // test stand-in) can hand back an object the IDL attribute refuses.
+    if (voice) { try { u.voice = voice; } catch (e) {} }
     var advance = function () {
       if (run !== speechRun) return;   // cancelled: do not resume a dead queue
       speechUtterance = null;

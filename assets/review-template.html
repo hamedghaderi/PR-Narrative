@@ -85,6 +85,15 @@
                    border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px;
                    white-space:pre-wrap;word-break:break-word}
   .anno .anno-actions{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+  /* Background is supporting material, not the finding: it stays quieter than
+     .anno-body (smaller, muted, panel-tinted) so the eye lands on the body first. */
+  .anno .anno-background{margin-top:8px;border:1px solid var(--border);border-radius:6px;
+                         background:var(--panel-bg);color:var(--muted)}
+  .anno .anno-background > summary{padding:5px 10px;cursor:pointer;user-select:none;
+                                   font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .anno .anno-background > summary:hover{color:var(--ink)}
+  .anno .anno-background-text{padding:0 10px 9px;font-size:12.5px;
+                              white-space:pre-wrap;word-break:break-word}
   .anno.ai{border-style:dashed;border-color:var(--accent);background:#f6faff}
   .anno.ai.discarded{display:none}
   .anno.ai.accepted{border-style:solid;border-color:var(--green-border);background:var(--green-bg)}
@@ -108,6 +117,41 @@
   .composer textarea.code{font-family:ui-monospace,monospace;font-size:12.5px}
   .composer .anchor-note{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace}
   .composer .actions{display:flex;gap:8px;margin-top:6px}
+
+  /* ---- live Q&A (ask the agent) ----
+     Deliberately NOT the .composer / .anno vocabulary: those are blue-accented
+     "this becomes a review comment" surfaces. Questions never reach GitHub, so
+     every Q&A surface is grey/dashed and carries its own label. Same tokens,
+     different voice. */
+  .qa-panel .panel-head .qa-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
+  .qa-status-line{font-size:12.5px;color:var(--muted);margin:0 0 8px}
+  .qa-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0}
+  .qa-thread{border-left:3px dashed var(--gray-text);background:var(--panel-bg);
+             border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0}
+  .qa-thread .qa-target{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                        font-size:11.5px;color:var(--muted);margin-bottom:6px}
+  .qa-msg{margin:6px 0;font-size:12.5px}
+  .qa-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;
+            letter-spacing:.05em;color:var(--muted)}
+  .qa-text{white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+  .qa-text.qa-muted{color:var(--muted);font-style:italic}
+  .qa-pending{font-size:12px;color:var(--muted);font-style:italic;margin:6px 0}
+  .qa-notice{border:1px solid var(--amber-border);background:var(--amber-bg);color:#7a5c00;
+             border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px}
+  .qa-error{border:1px solid var(--red-border);background:var(--red-bg);color:var(--red-text);
+            border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px;
+            display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .qa-composer{border:1px dashed var(--gray-text);border-radius:8px;margin:8px 0;
+               padding:10px 12px;background:var(--panel-bg)}
+  .qa-composer .qa-composer-label{margin-bottom:6px;font-size:11px;font-weight:600;
+                                  text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .qa-composer textarea{font:inherit;font-size:13px;width:100%;min-height:56px;resize:vertical;
+                        border:1px solid var(--border);border-radius:7px;padding:6px 9px;
+                        background:#fff;color:var(--ink)}
+  .qa-composer .qa-count{margin-top:2px;text-align:right;font-size:11px;color:var(--muted)}
+  .qa-composer .actions{display:flex;gap:8px;margin-top:6px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn:disabled:hover{background:var(--panel-bg)}
 
   /* ---- overflow ---- */
   .overflow{border:1px dashed var(--border);border-radius:10px;padding:14px 16px;margin:0 0 16px;background:var(--panel-bg)}
@@ -233,6 +277,28 @@
 
   var isLive = !!document.querySelector('meta[name="pr-review-live"]');
 
+  // ---- live Q&A session plumbing (annotation-schema.md §5) ----
+  // The channel needs BOTH halves: the live marker (a server is serving this page)
+  // and a sessionNonce in the diff JSON (that server was started with --session-dir
+  // /--nonce). Without a nonce every POST /ask would 404 or 409, so the affordances
+  // must not exist at all. qaEnabled is therefore the single gate for every Q&A
+  // surface, and it can only ever be true on an isLive page.
+  var sessionNonce = typeof DATA.sessionNonce === "string" && DATA.sessionNonce ? DATA.sessionNonce : null;
+  var qaEnabled = isLive && sessionNonce !== null;
+  var MAX_QUESTION_CHARS = 4000;   // §5.6; server answers 413 above this
+  var MAX_PENDING = 5;             // §5.6; Ask affordances disable at this many
+  var POLL_INTERVAL_MS = 2000;     // §5.5 "the page polls this endpoint periodically"
+  var SLOW_ANSWER_MS = 180000;     // 3 minutes → non-blocking "no response yet" notice
+  var POLL_FAILURES_BEFORE_END = 3;
+  var qaQuestions = [];            // in ask order; each entry is a question + its answer
+  var qaByQid = {};
+  var qaCounter = 0;
+  var qaState = "active";          // "active" | "ended" (server gone) | "stale" (409)
+  var qaPollTimer = null;
+  var qaPollFailures = 0;
+  var qaPanelBody = null;
+  var submitted = false;
+
   // Reviewer-namespaced key ONLY; must never collide with author mode's "pr-review:<branch>".
   var STORE_KEY;
   if (DATA.mode === "pr" && DATA.repo != null && DATA.prNumber != null) {
@@ -245,19 +311,21 @@
   var aiAnnotations = [];
   var generalComment = "";
   var idCounter = 1;
+  var AI_COPY_FIELDS = ["severity", "reasoning", "disproof", "background"];
 
   function seedFromData() {
     (DATA.aiAnnotations || []).forEach(function (a) {
       // AI drafts default EXCLUDED (accepted:false) unless the injected data set it true.
-      aiAnnotations.push({
+      var annotation = {
         id: a.id != null ? a.id : nextId(),
         scope: a.scope, type: a.type, filePath: a.filePath,
         lineStart: a.lineStart, lineEnd: a.lineEnd, side: a.side,
         body: a.body || "", suggestedCode: a.suggestedCode,
         origin: "ai", accepted: a.accepted === true,
-        severity: a.severity, reasoning: a.reasoning,
         _discarded: false
-      });
+      };
+      AI_COPY_FIELDS.forEach(function (field) { annotation[field] = a[field]; });
+      aiAnnotations.push(annotation);
     });
   }
 
@@ -520,6 +588,30 @@
     var saveBtn = el("button", "btn primary small", editing ? "Save" : "Add comment");
     var cancelBtn = el("button", "btn small", "Cancel");
     actions.appendChild(saveBtn); actions.appendChild(cancelBtn);
+    // Same selection, second destination: instead of becoming a review comment,
+    // this line range becomes a question to the agent. Live-and-nonce only, and
+    // only for line ranges, because §5.3's "lines" target needs a line range.
+    if (qaEnabled && lineInfo && !editing) {
+      var askLinesBtn = el("button", "btn small qa-ask-lines-btn", "Ask about this");
+      askLinesBtn.addEventListener("click", function () {
+        var parent = c.parentNode;
+        var anchor = c.nextSibling;
+        c.remove();
+        clearSelectionEls();
+        openQaComposer({
+          target: {
+            type: "lines", filePath: filename,
+            lineStart: lineInfo.start, lineEnd: lineInfo.end, side: lineInfo.side
+          },
+          threadId: null,
+          parentQid: null,
+          container: parent,
+          insertBefore: anchor,
+          label: "Ask the agent about " + anchorNote.textContent
+        });
+      });
+      actions.appendChild(askLinesBtn);
+    }
     c.appendChild(actions);
 
     cancelBtn.addEventListener("click", function () { c.remove(); clearSelectionEls(); });
@@ -581,6 +673,8 @@
       var node = buildAnnoNode(a);
       placeAnno(a, node);
     });
+    // Cards were just rebuilt, so any thread hanging under one went with them.
+    if (qaEnabled) { renderAnnotationThreads(); updateAskAvailability(); }
   }
 
   function placeAnno(a, node) {
@@ -644,6 +738,9 @@
       dp.appendChild(el("em", null, "Prove this wrong: " + a.disproof));
       n.appendChild(dp);
     }
+    if (a.origin === "ai" && a.background) {
+      n.appendChild(buildBackgroundBlock(a.background));
+    }
 
     var actions = el("div", "anno-actions");
     if (a.origin === "ai") {
@@ -662,6 +759,37 @@
         saveDraft(); renderAnnotations(); renderCounts();
       });
       actions.appendChild(acceptBtn); actions.appendChild(editBtn); actions.appendChild(discardBtn);
+      if (qaEnabled) {
+        // Live-and-nonce only (qaEnabled implies isLive, matching #submit-btn):
+        // both affordances need the review server's Q&A channel, so the
+        // no-python3 download-only page must not offer them. Deliberately NOT
+        // gated on DATA.mode, unlike #copy-fixlist-btn: both modes consume
+        // background (`pr` ships it to GitHub inside a collapsed <details>,
+        // `local` prints a "Background:" paragraph in the fix-list).
+        var askBtn = el("button", "btn small qa-ask-btn", "Ask");
+        askBtn.addEventListener("click", function () {
+          openQaComposer({
+            target: { type: "annotation", annotationId: a.id },
+            threadId: null,
+            parentQid: null,
+            container: n,
+            label: "Ask the agent about this finding",
+            afterClose: function () { renderQa(); }
+          });
+        });
+        actions.appendChild(askBtn);
+        if (!a.background) {
+          // The `!a.background` guard is what removes this button once an answer
+          // to a background-request lands: attachAnswers() writes answer.background
+          // onto the annotation and re-renders, so the collapsed <details> above
+          // appears in the same pass that this button disappears.
+          var bgBtn = el("button", "btn small request-background-btn", "Request background");
+          bgBtn.addEventListener("click", function () {
+            requestBackground(a, bgBtn, n);
+          });
+          actions.appendChild(bgBtn);
+        }
+      }
     } else {
       var uEdit = el("button", "btn small", "Edit");
       uEdit.addEventListener("click", function () {
@@ -682,6 +810,18 @@
   function annoLineInfo(a) {
     if (a.scope !== "line") return null;
     return { start: a.lineStart, end: a.lineEnd, side: a.side, seedText: a.suggestedCode };
+  }
+
+  // Supporting context for an AI finding (annotation-schema.md §1), never the
+  // finding itself: a real <details> element with no `open` attribute, so it is
+  // collapsed until the reader asks for it. Built node-by-node and filled with
+  // textContent (via el()) so an agent-authored string cannot inject markup.
+  function buildBackgroundBlock(text) {
+    var d = document.createElement("details");
+    d.className = "anno-background";
+    d.appendChild(el("summary", null, "Background"));
+    d.appendChild(el("div", "anno-background-text", text));
+    return d;
   }
 
   function badge(cls, txt) { return el("span", cls, txt); }
@@ -747,7 +887,7 @@
     var annotations = [];
     userAnnotations.forEach(function (a) { annotations.push(stripInternal(a)); });
     aiAnnotations.forEach(function (a) { if (!a._discarded) annotations.push(stripInternal(a)); });
-    return {
+    var payload = {
       kind: "review-annotations",
       mode: DATA.mode,
       repo: DATA.repo != null ? DATA.repo : null,
@@ -756,6 +896,14 @@
       generalComment: generalComment,
       annotations: annotations
     };
+    // Both extras are Q&A-only, so a page without the live Q&A channel (fallback,
+    // or a server started without --session-dir) produces byte-identical output to
+    // before: no nonce, no transcript key.
+    if (qaEnabled) {
+      payload.nonce = sessionNonce;   // §5.2: /submit is nonce-checked in Q&A mode
+      if (qaQuestions.length) payload.transcript = buildTranscript();
+    }
+    return payload;
   }
 
   function stripInternal(a) {
@@ -771,6 +919,7 @@
       if (a.severity != null) out.severity = a.severity;
       if (a.reasoning != null) out.reasoning = a.reasoning;
       if (a.disproof != null) out.disproof = a.disproof;
+      if (a.background != null) out.background = a.background;
     }
     return out;
   }
@@ -779,6 +928,10 @@
   // rendered Markdown. Kept identical to DISPROOF_LABEL in scripts/build_review.py
   // so the local fix-list and a posted GitHub comment read the same way.
   var DISPROOF_LABEL = "**Smallest check that would prove this wrong:**";
+
+  // Prefix for the AI `background` paragraph in the fix-list (annotation-schema.md
+  // §4): plain text, immediately after the body and before any suggestion fence.
+  var BACKGROUND_LABEL = "Background:";
 
   // Local-mode fix-list: the Markdown the agent would render from a submitted
   // payload, built client-side so the user can paste it somewhere directly
@@ -831,6 +984,10 @@
           lines.push("");
           lines.push(a.body || "");
           lines.push("");
+          if (a.origin === "ai" && a.background) {
+            lines.push(BACKGROUND_LABEL + " " + a.background);
+            lines.push("");
+          }
           if (a.origin === "ai" && a.disproof) {
             lines.push(DISPROOF_LABEL + " " + a.disproof);
             lines.push("");
@@ -846,6 +1003,10 @@
           lines.push("");
           lines.push(a.body || "");
           lines.push("");
+          if (a.origin === "ai" && a.background) {
+            lines.push(BACKGROUND_LABEL + " " + a.background);
+            lines.push("");
+          }
           if (a.origin === "ai" && a.disproof) {
             lines.push(DISPROOF_LABEL + " " + a.disproof);
             lines.push("");
@@ -869,6 +1030,485 @@
     }
 
     return lines.join("\n");
+  }
+
+  // =====================================================================
+  //  Live Q&A: ask the agent about a finding or a line range
+  //  Protocol: references/annotation-schema.md §5. Every function below is
+  //  dead code unless qaEnabled; nothing here runs, renders, or listens on a
+  //  fallback (file://, no-server) page.
+  //  Security: question and answer bodies are untrusted free text and are
+  //  ALWAYS placed with el()/textContent. No raw-HTML-string DOM sink exists in this
+  //  section, and no markdown/HTML rendering of answers (§5.8).
+  // =====================================================================
+
+  function clearNode(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+
+  function pendingQuestions() {
+    return qaQuestions.filter(function (q) { return !q.answered; });
+  }
+
+  function canAsk() {
+    return qaEnabled && qaState === "active" && pendingQuestions().length < MAX_PENDING;
+  }
+
+  function askBlockedReason() {
+    if (qaState === "stale") return "This page belongs to an older review session.";
+    if (qaState === "ended") return "The review session has ended.";
+    if (pendingQuestions().length >= MAX_PENDING) {
+      return "Waiting on " + MAX_PENDING + " questions already. Ask again once one is answered.";
+    }
+    return "";
+  }
+
+  // §5.3: qid is `<sessionNonce>-q<counter>`, counter starting at 1. The server
+  // validates it with re.fullmatch(f"{nonce}-q[0-9]+", qid) and rejects anything
+  // else with 400, so this format is a hard contract, not a convention.
+  function nextQid() { qaCounter += 1; return sessionNonce + "-q" + qaCounter; }
+
+  function makeQuestion(spec) {
+    var q = {
+      qid: nextQid(),
+      nonce: sessionNonce,
+      kind: spec.kind,
+      target: spec.target,
+      threadId: spec.threadId,
+      parentQid: spec.parentQid != null ? spec.parentQid : null,
+      body: spec.body || "",
+      askedAt: new Date().toISOString(),
+      askedAtMs: Date.now(),
+      answer: null,
+      answered: false
+    };
+    if (!q.threadId) q.threadId = q.qid;   // a top-level question starts its own thread
+    return q;
+  }
+
+  function questionWire(q) {
+    return {
+      qid: q.qid, nonce: q.nonce, kind: q.kind, target: q.target,
+      threadId: q.threadId, parentQid: q.parentQid, body: q.body, askedAt: q.askedAt
+    };
+  }
+
+  // One POST, no auto-retry: callers surface the rejection with a single Retry
+  // button so a dead server can never turn into a request loop.
+  function postQuestion(q) {
+    return fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(questionWire(q))
+    }).then(
+      function (res) {
+        if (res.status === 409) {
+          endQaSession("stale");
+          throw new Error("Stale session: the server rejected this page's nonce.");
+        }
+        if (res.status === 413) {
+          throw new Error("That question is too long (limit " + MAX_QUESTION_CHARS + " characters).");
+        }
+        if (!res.ok) throw new Error("The server rejected the question (HTTP " + res.status + ").");
+        return true;
+      },
+      function () { throw new Error("Could not reach the review server."); }
+    );
+  }
+
+  function registerQuestion(q) {
+    qaQuestions.push(q);
+    qaByQid[q.qid] = q;
+    ensurePolling();
+  }
+
+  function showQaError(host, message, onRetry) {
+    clearNode(host);
+    var box = el("div", "qa-error");
+    box.appendChild(el("span", null, message));
+    if (onRetry) {
+      var retry = el("button", "btn small", "Retry");
+      retry.addEventListener("click", onRetry);
+      box.appendChild(retry);
+    }
+    host.appendChild(box);
+  }
+
+  function closeQaComposer() {
+    var open = document.querySelector(".qa-composer");
+    if (open) open.remove();
+  }
+
+  function openQaComposer(opts) {
+    closeQaComposer();
+    var c = el("div", "qa-composer");
+    c.appendChild(el("div", "qa-composer-label", opts.label));
+
+    var ta = document.createElement("textarea");
+    ta.maxLength = MAX_QUESTION_CHARS;   // client-side half of the §5.6 cap
+    ta.placeholder = "What would you like the agent to look into?";
+    c.appendChild(ta);
+
+    var count = el("div", "qa-count", "0 / " + MAX_QUESTION_CHARS);
+    ta.addEventListener("input", function () {
+      count.textContent = ta.value.length + " / " + MAX_QUESTION_CHARS;
+    });
+    c.appendChild(count);
+
+    var actions = el("div", "actions");
+    var sendBtn = el("button", "btn primary small", "Send question");
+    var cancelBtn = el("button", "btn small", "Cancel");
+    actions.appendChild(sendBtn); actions.appendChild(cancelBtn);
+    c.appendChild(actions);
+
+    var status = el("div", "qa-status");
+    c.appendChild(status);
+
+    cancelBtn.addEventListener("click", function () {
+      c.remove();
+      if (opts.afterClose) opts.afterClose();
+    });
+
+    function attempt(q) {
+      sendBtn.disabled = true; cancelBtn.disabled = true;
+      clearNode(status);
+      status.appendChild(el("div", "qa-pending", "Sending…"));
+      postQuestion(q).then(function () {
+        c.remove();
+        registerQuestion(q);
+        renderQa();
+      }).catch(function (err) {
+        sendBtn.disabled = false; cancelBtn.disabled = false;
+        showQaError(status, err.message, function () { attempt(q); });
+      });
+    }
+
+    sendBtn.addEventListener("click", function () {
+      var body = ta.value.trim();
+      if (!body) { ta.focus(); return; }
+      if (body.length > MAX_QUESTION_CHARS) body = body.slice(0, MAX_QUESTION_CHARS);
+      if (!canAsk()) { showQaError(status, askBlockedReason(), null); return; }
+      attempt(makeQuestion({
+        kind: "question", target: opts.target,
+        threadId: opts.threadId, parentQid: opts.parentQid, body: body
+      }));
+    });
+
+    if (opts.insertBefore && opts.container) {
+      opts.container.insertBefore(c, opts.insertBefore);
+    } else {
+      opts.container.appendChild(c);
+    }
+    ta.focus();
+    return c;
+  }
+
+  // §5.3 background-request: same channel, empty body, annotation target.
+  function requestBackground(a, btn, card) {
+    if (!canAsk()) return;
+    var q = makeQuestion({
+      kind: "background-request",
+      target: { type: "annotation", annotationId: a.id },
+      threadId: null, parentQid: null, body: ""
+    });
+    var status = el("div", "qa-status");
+    card.appendChild(status);
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = "Requesting…";
+    postQuestion(q).then(function () {
+      status.remove();
+      registerQuestion(q);
+      renderQa();
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = original;
+      showQaError(status, err.message, function () {
+        status.remove();
+        requestBackground(a, btn, card);
+      });
+    });
+  }
+
+  // ---- thread rendering (all text via el()/textContent) ----
+
+  function threadIdsOf(list) {
+    var seen = {}, order = [];
+    list.forEach(function (q) {
+      if (!seen[q.threadId]) { seen[q.threadId] = true; order.push(q.threadId); }
+    });
+    return order;
+  }
+
+  function formatElapsed(ms) {
+    var secs = Math.max(0, Math.round(ms / 1000));
+    if (secs < 60) return secs + "s";
+    return Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+  }
+
+  function targetLabel(t) {
+    if (!t) return "";
+    if (t.type === "lines") {
+      var range = t.lineStart === t.lineEnd ? String(t.lineStart) : t.lineStart + "-" + t.lineEnd;
+      return t.filePath + " : line " + range + " (" + t.side + ")";
+    }
+    return "finding " + t.annotationId;
+  }
+
+  function buildQuestionNode(q) {
+    var msg = el("div", "qa-msg qa-q");
+    msg.appendChild(el("span", "qa-label", "You"));
+    if (q.kind === "background-request") {
+      msg.appendChild(el("div", "qa-text qa-muted", "Requested background for this finding."));
+    } else {
+      msg.appendChild(el("div", "qa-text", q.body));
+    }
+    return msg;
+  }
+
+  function buildAnswerNode(q) {
+    var msg = el("div", "qa-msg qa-a");
+    msg.appendChild(el("span", "qa-label", "Agent"));
+    if (q.answer) {
+      msg.appendChild(el("div", "qa-text", q.answer));
+    } else if (q.kind === "background-request") {
+      msg.appendChild(el("div", "qa-text qa-muted", "Background added to this finding."));
+    } else {
+      msg.appendChild(el("div", "qa-text qa-muted", "(no answer text)"));
+    }
+    return msg;
+  }
+
+  function buildPendingNode(q) {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", "qa-pending", "Waiting for the agent… " + formatElapsed(Date.now() - q.askedAtMs)));
+    if (Date.now() - q.askedAtMs >= SLOW_ANSWER_MS) {
+      frag.appendChild(el("div", "qa-notice",
+        "No response yet - the agent may have stopped. You can still Submit or Download."));
+    }
+    return frag;
+  }
+
+  function buildThreadNode(threadId, list, opts) {
+    var wrap = el("div", "qa-thread");
+    wrap.dataset.threadId = threadId;
+    if (opts && opts.showTarget) {
+      var chainTarget = list.length ? list[0].target : null;
+      wrap.appendChild(el("div", "qa-target", targetLabel(chainTarget)));
+    }
+    var chain = list.filter(function (q) { return q.threadId === threadId; });
+    chain.forEach(function (q, i) {
+      wrap.appendChild(buildQuestionNode(q));
+      if (q.answered) {
+        wrap.appendChild(buildAnswerNode(q));
+        if (i === chain.length - 1) {
+          var followBtn = el("button", "btn small qa-followup-btn", "Follow up");
+          var host = el("div", "qa-actions");
+          followBtn.addEventListener("click", function () {
+            openQaComposer({
+              target: q.target, threadId: threadId, parentQid: q.qid,
+              container: wrap, label: "Follow up on this thread",
+              afterClose: function () { renderQa(); }
+            });
+          });
+          host.appendChild(followBtn);
+          wrap.appendChild(host);
+        }
+      } else {
+        wrap.appendChild(buildPendingNode(q));
+      }
+    });
+    return wrap;
+  }
+
+  function renderAnnotationThreads() {
+    Array.prototype.forEach.call(document.querySelectorAll(".anno .qa-thread"),
+      function (n) { n.remove(); });
+    if (!qaEnabled) return;
+    var byAnno = {};
+    qaQuestions.forEach(function (q) {
+      if (!q.target || q.target.type !== "annotation") return;
+      if (!byAnno[q.target.annotationId]) byAnno[q.target.annotationId] = [];
+      byAnno[q.target.annotationId].push(q);
+    });
+    Object.keys(byAnno).forEach(function (annoId) {
+      var card = document.querySelector('.anno[data-anno-id="' + cssEscape(annoId) + '"]');
+      if (!card) return;
+      var list = byAnno[annoId];
+      // Keep an open composer last so a thread arriving mid-typing cannot jump over it.
+      var openComposerNode = card.querySelector(".qa-composer");
+      threadIdsOf(list).forEach(function (tid) {
+        var node = buildThreadNode(tid, list, { showTarget: false });
+        if (openComposerNode) card.insertBefore(node, openComposerNode);
+        else card.appendChild(node);
+      });
+    });
+  }
+
+  // Line-range questions get their own panel above the sticky footer: they are not
+  // annotations, they will never be submitted, and mixing them into .anno-list would
+  // read exactly like a comment that ships.
+  function buildQaPanel() {
+    if (!qaEnabled) return;
+    var panel = el("section", "panel qa-panel");
+    panel.id = "qa-panel";
+    var head = el("div", "panel-head");
+    head.appendChild(el("span", null, "Questions to the agent"));
+    head.appendChild(el("span", "qa-sub", "not part of your review · never posted to GitHub"));
+    head.appendChild(el("span", "toggle", "▾ collapse"));
+    head.addEventListener("click", function () {
+      panel.classList.toggle("collapsed");
+      head.querySelector(".toggle").textContent =
+        panel.classList.contains("collapsed") ? "▸ expand" : "▾ collapse";
+    });
+    panel.appendChild(head);
+    qaPanelBody = el("div", "panel-body");
+    panel.appendChild(qaPanelBody);
+    document.querySelector(".wrap").appendChild(panel);
+  }
+
+  function renderQuestionsPanel() {
+    if (!qaEnabled || !qaPanelBody) return;
+    // Detach (not destroy) an open composer so its typed text survives a re-render.
+    var keep = qaPanelBody.querySelector(".qa-composer");
+    if (keep) keep.remove();
+    clearNode(qaPanelBody);
+
+    var pending = pendingQuestions().length;
+    var status = el("div", "qa-status-line",
+      qaQuestions.length + " question" + (qaQuestions.length === 1 ? "" : "s") +
+      " asked · " + pending + " waiting");
+    qaPanelBody.appendChild(status);
+
+    if (qaState === "stale") {
+      qaPanelBody.appendChild(el("div", "qa-notice",
+        "Stale session. This page was opened for an earlier review run, so the server " +
+        "refused it. Asking is disabled. Use \u201cDownload annotations\u201d to save your review."));
+    } else if (qaState === "ended") {
+      qaPanelBody.appendChild(el("div", "qa-notice",
+        "Session ended. The review server stopped responding (timeout, submit elsewhere, " +
+        "or crash). Asking is disabled and answers will no longer arrive. Your annotations " +
+        "are intact - use \u201cDownload annotations\u201d to hand them back."));
+    } else if (pending >= MAX_PENDING) {
+      qaPanelBody.appendChild(el("div", "qa-notice",
+        "Waiting on " + MAX_PENDING + " questions. Asking is paused until one is answered."));
+    }
+
+    var lineQuestions = qaQuestions.filter(function (q) {
+      return q.target && q.target.type === "lines";
+    });
+    if (!lineQuestions.length) {
+      qaPanelBody.appendChild(el("p", "qa-empty",
+        "Select lines in the diff and choose \u201cAsk about this\u201d to ask the agent about them. " +
+        "Questions about a finding appear under its card."));
+    } else {
+      threadIdsOf(lineQuestions).forEach(function (tid) {
+        qaPanelBody.appendChild(buildThreadNode(tid, lineQuestions, { showTarget: true }));
+      });
+    }
+    if (keep) qaPanelBody.appendChild(keep);
+  }
+
+  function updateAskAvailability() {
+    if (!qaEnabled) return;
+    var allowed = canAsk();
+    var reason = allowed ? "" : askBlockedReason();
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".qa-ask-btn, .qa-ask-lines-btn, .qa-followup-btn, .request-background-btn"),
+      function (b) { b.disabled = !allowed; b.title = reason; });
+  }
+
+  function renderQa() {
+    if (!qaEnabled) return;
+    renderAnnotationThreads();
+    renderQuestionsPanel();
+    updateAskAvailability();
+  }
+
+  // ---- polling (§5.5): GET /answers every ~2s while anything is pending ----
+
+  function ensurePolling() {
+    if (!qaEnabled) return;
+    var wanted = qaState === "active" && pendingQuestions().length > 0;
+    if (wanted && qaPollTimer === null) {
+      qaPollTimer = setInterval(pollAnswers, POLL_INTERVAL_MS);
+    } else if (!wanted && qaPollTimer !== null) {
+      clearInterval(qaPollTimer); qaPollTimer = null;
+    }
+  }
+
+  function pollAnswers() {
+    fetch("/answers", { cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (data) {
+      qaPollFailures = 0;
+      attachAnswers(data && Array.isArray(data.answers) ? data.answers : []);
+    }).catch(function () {
+      qaPollFailures += 1;
+      if (qaPollFailures >= POLL_FAILURES_BEFORE_END) endQaSession("ended");
+      else renderQa();   // keep the elapsed counters ticking through a blip
+    });
+  }
+
+  function attachAnswers(answers) {
+    var gotAnswer = false;
+    var gotBackground = false;
+    answers.forEach(function (ans) {
+      if (!ans || typeof ans.qid !== "string") return;
+      var q = qaByQid[ans.qid];
+      if (!q || q.answered) return;
+      q.answered = true;
+      q.answer = typeof ans.body === "string" ? ans.body : "";
+      gotAnswer = true;
+      if (q.kind === "background-request" && typeof ans.background === "string" && ans.background) {
+        var target = null;
+        aiAnnotations.forEach(function (a) { if (a.id === q.target.annotationId) target = a; });
+        // Flows straight into stripInternal() → submit payload → GitHub <details>.
+        if (target) { target.background = ans.background; gotBackground = true; }
+      }
+    });
+    if (gotBackground) renderAnnotations();   // details block appears, button goes away
+    if (gotAnswer || !gotBackground) renderQa();
+    ensurePolling();
+  }
+
+  function endQaSession(reason) {
+    if (qaState !== "active") return;
+    qaState = reason === "stale" ? "stale" : "ended";
+    if (qaPollTimer !== null) { clearInterval(qaPollTimer); qaPollTimer = null; }
+    closeQaComposer();
+    // Re-show the no-server fallback path: whatever happened to the session, the
+    // reviewer must still be able to save their decisions.
+    if (downloadBtn) downloadBtn.style.display = "";
+    renderQa();
+  }
+
+  function buildTranscript() {
+    // annotation-schema.md §3/§5.9. NEVER posted to GitHub, never in the fix-list;
+    // it exists so the agent can see what was asked alongside the decisions.
+    return qaQuestions.map(function (q) {
+      return {
+        qid: q.qid,
+        threadId: q.threadId,
+        target: q.target,
+        body: q.body,
+        answer: q.answered ? (q.answer != null ? q.answer : "") : null,
+        answered: q.answered === true
+      };
+    });
+  }
+
+  function hasUnsavedWork() {
+    if (userAnnotations.length) return true;
+    if (qaQuestions.length) return true;
+    if (generalComment && generalComment.trim()) return true;
+    return aiAnnotations.some(function (a) { return a.accepted || a._discarded; });
+  }
+
+  function onBeforeUnload(ev) {
+    if (submitted || !hasUnsavedWork()) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+    return "";
   }
 
   var submitBtn = document.getElementById("submit-btn");
@@ -912,6 +1552,12 @@
   });
 
   submitBtn.addEventListener("click", function () {
+    var waiting = qaEnabled ? pendingQuestions().length : 0;
+    if (waiting > 0 && !window.confirm(
+        "You have " + waiting + " unanswered question" + (waiting === 1 ? "" : "s") +
+        ". Submit anyway?")) {
+      return;
+    }
     var payload = buildPayload();
     submitBtn.disabled = true;
     submitBtn.textContent = "Sending…";
@@ -921,6 +1567,8 @@
       body: JSON.stringify(payload)
     }).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
+      submitted = true;   // review is in the agent's hands: no beforeunload nag
+      if (qaPollTimer !== null) { clearInterval(qaPollTimer); qaPollTimer = null; }
       submitBtn.textContent = "✓ Sent. You can close this tab";
     }).catch(function () {
       // Server gone? Fall back to a download so the review isn't lost.
@@ -959,9 +1607,17 @@
   renderBanner();
   renderFiles();
   renderOverflow();
+  if (qaEnabled) buildQaPanel();   // before renderAnnotations: threads need a host
   renderAnnotations();
   generalTa.value = generalComment;
   renderCounts();
+  if (qaEnabled) {
+    renderQa();
+    // Live-Q&A only, deliberately: questions are the one piece of page state with
+    // no localStorage backing (annotations and the general comment are drafted
+    // through saveDraft()), and the fallback page must behave exactly as before.
+    window.addEventListener("beforeunload", onBeforeUnload);
+  }
 })();
 </script>
 </body>

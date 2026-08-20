@@ -48,7 +48,9 @@ when nothing in the diff clears the bar, the page opens with no AI comments at a
 ### Reviewer mode
 
 PR URL or local branch → narrative context → interactive diff → accept or reject AI
-findings → **pending GitHub review**, or a local fix-list
+findings → **pending GitHub review**, or a local fix-list. With `python3`, the live
+review server also supports in-page Q&A: the reviewer can ask follow-up questions
+and request background on AI callouts while the review is open.
 
 The page puts the narrative up top and the real diff below it. Click a line to comment,
 drag across a few lines for a range, or leave a suggestion. AI-drafted callouts arrive
@@ -129,7 +131,7 @@ installs it to the right directory. For flags like `--list`, `-g` and `--copy`, 
 | An agent with shell access | Required. Backgrounding a process is needed only for the optional live server | Required, same |
 | `git` and a browser | Required | Required |
 | `gh`, authenticated | Only to review a real PR; reviewing a local branch needs none | Never used. Reads your local git history only |
-| `python3` | Optional. Runs the live review server; without it the page falls back to a download button | Optional, identical fallback |
+| `python3` | Optional. Runs the live review server; without it the page falls back to a download button. **Required for live Q&A** — without `python3` the Ask UI is absent, though annotations still work via download. | Optional, identical fallback |
 
 The `explain` and `summarize-changes` subcommands are lighter: they touch `gh` in a
 read-only way only when you hand them a PR URL, need no `gh` at all for a local branch,

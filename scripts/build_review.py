@@ -51,11 +51,33 @@ def _first_valid_anchor(files, path):
     return None
 
 
+def _details_block(text, summary):
+    return "\n\n<details><summary>%s</summary>\n%s\n</details>" % (summary, text)
+
+
 def _disproof_note(ann):
     if ann.get("origin") != "ai":
         return ""
     text = (ann.get("disproof") or "").strip()
     return DISPROOF_LABEL + " " + text if text else ""
+
+
+def _background_block(ann):
+    if ann.get("origin") != "ai":
+        return ""
+    text = (ann.get("background") or "").strip()
+    return _details_block(text, "Background") if text else ""
+
+
+def _assemble_comment_body(parts):
+    block = parts[-1] if parts else ""
+    base_parts = [part for part in parts[:-1] if part]
+    base = "\n\n".join(base_parts).strip()
+    if not block:
+        return _truncate(base)
+    if len(base) + len(block) <= MAX_BODY:
+        return _truncate(base + block)
+    return _truncate(base)
 
 
 def _build_comment_body(ann, downgraded=False):
@@ -77,6 +99,14 @@ def _build_comment_body(ann, downgraded=False):
     return body
 
 
+def _build_comment_body_with_background(ann, downgraded=False, file_body=None):
+    if file_body is not None:
+        base_body = file_body
+    else:
+        base_body = _build_comment_body(ann, downgraded)
+    return _assemble_comment_body([base_body, _background_block(ann)])
+
+
 def _map_line_comment(ann, files, warnings):
     path = ann["filePath"]
     side = ann["side"]
@@ -91,7 +121,7 @@ def _map_line_comment(ann, files, warnings):
         return None
 
     downgraded = ann.get("type") == "suggestion" and side == "LEFT"
-    comment = {"path": path, "body": _truncate(_build_comment_body(ann, downgraded))}
+    comment = {"path": path, "body": _build_comment_body_with_background(ann, downgraded)}
 
     lo, hi = sorted((start, end))
     if lo == hi:
@@ -118,7 +148,8 @@ def _map_file_comment(ann, files, warnings):
     note = _disproof_note(ann)
     if note:
         body = (body + "\n\n" + note).strip()
-    return {"path": path, "line": line, "side": side, "body": _truncate(body)}
+    return {"path": path, "line": line, "side": side,
+            "body": _build_comment_body_with_background(ann, file_body=body)}
 
 
 def build_payload(annotations, files, commit_id, body=""):

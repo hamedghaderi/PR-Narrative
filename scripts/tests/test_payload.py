@@ -333,6 +333,125 @@ class TruncationTests(unittest.TestCase):
         self.assertTrue(result["payload"]["body"].endswith("\n[truncated]"))
 
 
+class BackgroundDetailTests(unittest.TestCase):
+    def test_accepted_ai_background_appended_in_details_block(self):
+        """AI `background` -> one <details> block after disproof and suggestion fence."""
+        anns = [_ann(id="b-1", origin="ai", accepted=True, type="suggestion",
+                     lineStart=13, lineEnd=13, side="RIGHT", severity="important",
+                     reasoning="breaking change", body="explanation",
+                     suggestedCode="return '';",
+                     disproof="Call formatDate('x') and assert ''.",
+                     background="Domain context about the records page.")]
+        body = build_review.build_payload(
+            anns, _files(), "sha")["payload"]["comments"][0]["body"]
+        self.assertEqual(body.count("<details>"), 1)
+        self.assertEqual(body.count("</details>"), 1)
+        self.assertIn("<summary>Background</summary>", body)
+        self.assertIn("Domain context about the records page.", body)
+        self.assertLess(body.index("explanation"),
+                        body.index(build_review.DISPROOF_LABEL))
+        self.assertLess(body.index(build_review.DISPROOF_LABEL),
+                        body.index("```suggestion"))
+        self.assertLess(body.index("```suggestion"),
+                        body.index("<details>"))
+
+    def test_background_omitted_when_it_would_cross_truncation_limit(self):
+        """if the full details block would exceed the limit, it is entirely absent."""
+        background = "bg text"
+        block_len = len("\n\n<details><summary>Background</summary>\n" +
+                        background + "\n</details>")
+        body = "x" * (build_review.MAX_BODY - block_len)
+        anns = [_ann(id="b-2", origin="ai", accepted=True, lineStart=13,
+                     lineEnd=13, side="RIGHT", severity="important",
+                     reasoning="r", body=body,
+                     disproof="a check",
+                     background=background)]
+        payload_body = build_review.build_payload(
+            anns, _files(), "sha")["payload"]["comments"][0]["body"]
+        self.assertEqual(payload_body.count("<details>"), 0)
+        self.assertEqual(payload_body.count("</details>"), 0)
+        self.assertNotIn("Background", payload_body)
+        self.assertLessEqual(len(payload_body), build_review.MAX_BODY)
+        self.assertIn("a check", payload_body)
+        self.assertFalse(payload_body.endswith("\n[truncated]"))
+
+    def test_unaccepted_ai_background_excluded(self):
+        """AI `background` with accepted:false is dropped entirely."""
+        anns = [_ann(id="b-3", origin="ai", accepted=False, lineStart=13,
+                     lineEnd=13, side="RIGHT", severity="important",
+                     reasoning="r", body="x",
+                     background="should not appear")]
+        result = build_review.build_payload(anns, _files(), "sha")
+        self.assertEqual(result["payload"]["comments"], [])
+
+
+class TranscriptExclusionTests(unittest.TestCase):
+    def test_transcript_key_never_reaches_payload(self):
+        """`transcript` in the submission is ignored and never serialized into output."""
+        anns = [
+            _ann(id="a-1", lineStart=13, lineEnd=13, side="RIGHT", body="c"),
+        ]
+        transcript = [
+            {"qid": "q-1", "threadId": "q-1",
+             "target": {"type": "annotation", "annotationId": "a-1"},
+             "body": "transcript body line", "answer": "answer body",
+             "answered": True},
+        ]
+        result = build_review.build_payload(
+            anns, _files(), "sha",
+            body="")
+        # Simulate a caller wrapping the result as JSON; we must not pass transcript
+        # into the builder and the serialized payload contains none of its body text.
+        result_with_input = {"annotations": anns, "transcript": transcript,
+                             "generalComment": ""}
+        annotations, general = build_review._extract_annotations(result_with_input)
+        built = build_review.build_payload(annotations, _files(), "sha",
+                                           body=general)
+        dumped = json.dumps(built)
+        self.assertNotIn("transcript", dumped)
+        self.assertNotIn("transcript body line", dumped)
+        self.assertNotIn("answer body", dumped)
+        # Existing invariant still holds.
+        self.assertNotIn("\"event\"", dumped)
+
+    def test_transcript_github_meaningful_strings_do_not_leak(self):
+        """GitHub-meaningful transcript strings never appear in the review payload."""
+        anns = [
+            _ann(id="a-1", lineStart=13, lineEnd=13, side="RIGHT",
+                 body="actual review comment"),
+        ]
+        transcript = [
+            {
+                "qid": "q-event",
+                "threadId": "q-event",
+                "target": {"type": "annotation", "annotationId": "a-1"},
+                "body": (
+                    "What if the reviewer clicks APPROVE and a <details> block "
+                    "appears? Could the event field leak?"
+                ),
+                "answer": (
+                    "No. The transcript is only for agent context; it is not part "
+                    "of the GitHub pending review payload."
+                ),
+                "answered": True,
+            },
+        ]
+        result_with_input = {
+            "kind": "review-annotations",
+            "annotations": anns,
+            "transcript": transcript,
+            "generalComment": "",
+        }
+        annotations, general = build_review._extract_annotations(result_with_input)
+        built = build_review.build_payload(annotations, _files(), "sha",
+                                           body=general)
+        dumped = json.dumps(built)
+        for leak in ("event", "APPROVE", "<details>"):
+            self.assertNotIn(leak, dumped,
+                             f"transcript-originating {leak!r} leaked into payload")
+        self.assertIn("actual review comment", dumped)
+
+
 class NoEventKeyTests(unittest.TestCase):
     def test_event_key_never_present(self):
         """`event` key never present in output payload (pending review)."""
@@ -364,7 +483,7 @@ class RoundTripTests(unittest.TestCase):
 
 class CliTests(unittest.TestCase):
     def test_cli_smoke(self):
-        """CLI: --annotations + --files-json + --commit-id → result JSON on stdout."""
+        """CLI: --annotations + --files-json + --commit-id -> result JSON on stdout."""
         anns = [
             _ann(id="a-1", lineStart=13, lineEnd=13, side="RIGHT",
                  body="user comment"),

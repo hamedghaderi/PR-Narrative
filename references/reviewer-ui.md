@@ -40,6 +40,7 @@ same `diff_anchor.py --files-json` call above.
 ```bash
 python3 - <<'PYEOF'
 import json
+import os
 
 body = json.load(open("/tmp/pr-{n}-diff-body.json"))
 
@@ -56,9 +57,23 @@ diff_json = {
     "aiAnnotations": [],                # filled in step 2 below
 }
 
+# Live Q&A only: the agent exports SESSION_NONCE in the parent bash shell before
+# invoking this heredoc; it flows in via os.environ because the heredoc delimiter is quoted.
+if os.environ.get("SESSION_NONCE"):
+    diff_json["sessionNonce"] = os.environ["SESSION_NONCE"]
+
 json.dump(diff_json, open("/tmp/pr-{n}-diff.json", "w"))
 PYEOF
 ```
+
+> [!NOTE]
+> When reviewer-mode live Q&A is enabled (`SKILL.md` §4 "With live Q&A"), the agent has
+> already `export`ed `SESSION_NONCE` in the same bash session before running this step;
+> see `SKILL.md` §4 "Build the page" for the exact command. Environment variables flow
+> from the parent shell into `python3 -` heredocs even when the delimiter is quoted, so
+> `os.environ.get("SESSION_NONCE")` above reads it correctly. The same value must be
+> passed to `scripts/review_server.py --nonce` and used in the session directory name.
+> Omit the `export` (and therefore the `sessionNonce` field) when live Q&A is not in use.
 
 `narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story). Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`
@@ -153,10 +168,13 @@ the caps, and don't invent a fifth reason to comment.
   correct finding a reviewer cannot follow has not landed.
 
 Populate `diff_json["aiAnnotations"]` with objects following the annotation object
-shape (`references/annotation-schema.md` §1) before running the substitution step
-above, each one `{id, scope, type, filePath, lineStart, lineEnd, side, body,
-suggestedCode?, origin: "ai", accepted: false, severity, reasoning, disproof?}`
-(`disproof` present exactly when `severity` is `"important"`).
+shape (`references/annotation-schema.md` §1) before running the substitution step. `id`
+is REQUIRED on every AI annotation and must be a stable agent-chosen string (for example,
+`"ai-1"`), because on-demand background requests and Q&A threads reference it.
+Each one has shape `{id, scope, type, filePath, lineStart, lineEnd, side, body,
+suggestedCode?, background?, origin: "ai", accepted: false, severity, reasoning, disproof?}`
+(`disproof` present exactly when `severity` is `"important"`; `background` is optional
+and governed by §2c below).
 
 A security-only variant of this policy, used by the review-security subcommand, is
 defined in §2b below. The body-writing rules in §2c apply to both.
@@ -478,6 +496,52 @@ internal notes about build steps and escaping stay as precise as they need to be
   it stands now.
 - No em dashes, matching the Writing style rules in `SKILL.md`.
 
+### Background: when and how
+
+Background is extra context attached to an annotation, not part of its `body`. The reader
+sees it only when the finding cannot be understood from the hunk alone.
+
+**Necessity test (closed, exhaustive list).** Background is permitted only when the
+finding depends on one of the following three things, and on nothing else:
+
+1. A domain term a reader outside this codebase would not know.
+2. A relationship to code **not** visible in this diff's hunks.
+3. Behavior that existed before this change and that this diff removes.
+
+A finding that is fully understandable from the hunk gets no background. Nothing else
+qualifies.
+
+**Content rules.** Background is plain text, ~80 words maximum, written in the same simple
+English as the body. Define domain terms in the order the body uses them. Never repeat the
+body's argument, and never add a new claim or extra evidence: background explains context,
+not extends the finding.
+
+**Caps and severity.** Background may appear on any severity that passes the necessity
+test. It does not count toward the §2 caps: background is a field on an existing
+annotation, not a new annotation; §2's categories and caps are unchanged.
+
+**On-demand background.** If the user asks for background on an already-posted finding from
+the page, follow the same content rules. Write the background about that existing finding
+without changing its `body`, `severity`, or `disproof`.
+
+**Worked example.** A diff removes a forward-price validation guard and makes a repository
+filter optional. Without background, the body still follows result first:
+
+> Forward positions priced at zero can now reach the P&L summary, because the removed
+> validation no longer throws them out. `getSpreadData()` returns those rows unless the
+> caller passes the new optional filter. Traders comparing the summary to the detail page
+> can see different totals.
+
+That body is enough if the reader already knows what a forward price is and that
+`ForwardRepository.getSpreadData()` feeds both pages. If they do not, attach ~60 words of
+background:
+
+> A forward price is the rate a currency pair is booked to exchange at on a future date.
+> `ForwardRepository.getSpreadData()` feeds both the P&L summary and the detail page;
+> before this change, `ForwardCalculator` rejected zero prices, so the summary relied on
+> that guard to hide unsettled rows. Removing the guard shifts the filter responsibility
+> to whoever calls `getSpreadData()`.
+
 ### Check every body before you inject it
 
 - Can someone understand this after reading it once?
@@ -499,6 +563,9 @@ internal notes about build steps and escaping stay as precise as they need to be
 - Could a developer who is not a native English speaker understand this after one read?
 - Does the stated seriousness match the real seriousness? Did you avoid inventing a result
   just to follow the order?
+- **Does this finding pass the background necessity test, and if yes, is background
+  present?**
+- **Does the background stay under ~80 words and add zero new claims?**
 
 If you cannot explain a finding simply, the problem is usually your own understanding, not
 the wording. Fix that first. If it still will not come out clearly, it is not ready: mark
@@ -571,59 +638,25 @@ the evidence supports.
 
 ## 3. Serve + wait
 
-Same single-Bash-call launch/poll pattern as author mode (see SKILL.md §4 "Build the
-page, serve it, and wait"): the server binary and the wait discipline don't change,
-only the page path and the out-file name:
+The canonical launch/wait blocks live in `SKILL.md` reviewer mode §4, because the
+agent carrying out the workflow is the one who needs a copy-pasteable Bash block.
+This section only describes the choices and points there.
 
-```bash
-OUT=/tmp/pr-annotations.json
-rm -f "$OUT"                         # clear any stale annotations first
-python3 <skill>/scripts/review_server.py \
-  --page /tmp/2026-07-22-pr-annotate-{r}-{n}.html \
-  --out  "$OUT" --open --timeout 3600 > /tmp/pr-review-server.log 2>&1 &
-PID=$!
-# Poll for the URL, with dead-process detection (bounded ~15s).
-URL=""
-for i in $(seq 1 30); do
-  URL=$(grep -o 'http://127.0.0.1:[0-9]*/' /tmp/pr-review-server.log | head -1)
-  [ -n "$URL" ] && break
-  if ! kill -0 "$PID" 2>/dev/null; then
-    echo "ERROR: review server exited before printing a URL. Log:"
-    tail -20 /tmp/pr-review-server.log
-    exit 1
-  fi
-  sleep 0.5
-done
-if [ -z "$URL" ]; then
-  echo "ERROR: timed out waiting for the review server URL. Log:"
-  tail -20 /tmp/pr-review-server.log
-  exit 1
-fi
-# Wait for open sentinel (PR_REVIEW_OPEN_OK or PR_REVIEW_OPEN_FAILED), bounded ~10s.
-# The URL prints before the open attempt, so the URL grep can return before the sentinel.
-for i in $(seq 1 20); do
-  grep -q 'PR_REVIEW_OPEN_OK\|PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log && break
-  sleep 0.5
-done
-if grep -q 'PR_REVIEW_OPEN_FAILED' /tmp/pr-review-server.log; then
-  # Shell-level fallback: fires ONLY on explicit failure (unconditional = two tabs = second Submit to dead server)
-  case "$(uname)" in Darwin) open "$URL" ;; *) command -v xdg-open >/dev/null && xdg-open "$URL" ;; esac
-fi
-echo "Review page: $URL"
-# Always include this URL in your message to the user, open success or not.
-# Poll for the annotations file (robust: works even if the server already exited).
-while [ ! -f "$OUT" ]; do
-  kill -0 "$PID" 2>/dev/null || { echo "Server exited before Submit. Check /tmp/pr-review-server.log (it may have hit --timeout; re-run this block)."; break; }
-  sleep 2
-done
-[ -f "$OUT" ] && cat "$OUT"
-```
+- Default reviewer mode (no live Q&A): use the single-Bash-call block in
+  `SKILL.md` reviewer mode §4 "Without live Q&A (default)". The server exits 0 on
+  submit or 2 on timeout; it prints `PR_REVIEW_URL`, `PR_REVIEW_DONE`, and
+  `PR_REVIEW_TIMEOUT`.
+- With live Q&A enabled: use the `--session-dir`/`--nonce`/`--max-lifetime` block
+  in `SKILL.md` reviewer mode §4 "With live Q&A". The server is launched once and
+  survives across agent turns. Pending questions are detected by globbing
+  `<session_dir>/questions/*.json` and checking for matching
+  `<session_dir>/answers/<qid>.json`; the server itself prints no questions-pending
+  sentinel. The same SKILL.md section also documents the answer turn.
 
-Run this as **one Bash tool call**, exactly as in author mode: launching the server
-and polling for `$OUT` must happen in the same call, or the wait in a later call can't
-see a server started earlier. Give it a generous timeout; if it times out, just
-re-launch against the same page. `$OUT` will contain the `review-annotations` payload
-(§6 below) once the user clicks **Submit review**.
+Run either block as a single Bash tool call. In Q&A mode the call ends when
+questions arrive (emits `PR_REVIEW_QUESTIONS <qids>` and exits 0), then the agent
+answers and re-enters the same wait block in a later call against the same session
+without restarting the server.
 
 ## 4. After submit: PR mode
 
@@ -716,6 +749,10 @@ The button is stateless: it reads the in-memory annotation state, writes nothing
   bodies followed by the footer's `generalComment`. The `# Review fix-list: <branch>`
   title and `Generated YYYY-MM-DD. Local branch review, nothing posted to GitHub.`
   line come first.
+- **`transcript` is explicitly excluded.** The transcript from the live Q&A protocol
+  (`references/annotation-schema.md` §5) is an agent-context field; it must never
+  appear in the fix-list. There is no scriptable fix-list generator in this repo, so
+  this invariant is enforced here by specification.
 - **The mandatory handoff paragraph is omitted from the clipboard, deliberately.**
   §4 requires that paragraph (`Treat the findings above as unverified review input…`)
   in every fix-list *file*, and §5 above still appends it verbatim when the agent
@@ -752,6 +789,8 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
 | `branch`         | `string`                   | Branch name: feeds the fix-list filename in local mode.                                    |
 | `generalComment` | `string`                   | The sticky-footer general comment box. May be `""` if the user left it empty.               |
 | `annotations`    | `array` of annotation objects | Every annotation currently in the page's state: user-authored ones plus every AI draft the user touched or left alone. `accepted` reflects the user's triage at submit time (**AI drafts default `false`; user annotations default `true`**). Filtering down to `accepted: true` happens downstream, in `build_review.py` for PR mode and in the fix-list renderer for local mode, not in this payload itself. |
+| `transcript`     | `array` of transcript entry objects | Optional. Present only when live Q&A was enabled. The full question/answer history, reconstructed from the session directory files. **This field is NEVER posted to GitHub and NEVER rendered into the fix-list.** It exists only for agent context and stays inside the session directory. See `references/annotation-schema.md` §3 and §5 for the authoritative shape of the `transcript` and its entries. |
+| `nonce`          | `string`                   | Present only when live Q&A was enabled. The `sessionNonce` passed to the server. The server validates it on every `POST /ask` and `POST /submit` to reject stale tabs. See `references/annotation-schema.md` §2 and §5 for the authoritative nonce contract. |
 
 ### Worked example
 

@@ -159,5 +159,242 @@ class ServerTestCase(unittest.TestCase):
         self.assertIn(b"hello review", data)
 
 
+class QAServerTestCase(unittest.TestCase):
+    NONCE = "a1b2c3"
+
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp()
+        self.out_path = os.path.join(self._tmpdir, "submit.json")
+        self.session_dir = os.path.join(self._tmpdir, "session")
+        os.makedirs(os.path.join(self.session_dir, "questions"))
+        os.makedirs(os.path.join(self.session_dir, "answers"))
+        self.done = threading.Event()
+        handler = review_server.build_handler(
+            PAGE_HTML,
+            self.out_path,
+            self.done,
+            session_dir=self.session_dir,
+            nonce=self.NONCE,
+        )
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+
+    def _conn(self):
+        return http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+
+    def _post(self, path, payload, headers=None):
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
+        h = {"Content-Type": "application/json"}
+        if headers:
+            h.update(headers)
+        conn = self._conn()
+        try:
+            conn.request("POST", path, body=body, headers=h)
+            response = conn.getresponse()
+            return response.status, response.read()
+        finally:
+            conn.close()
+
+    def _get_json(self, path):
+        conn = self._conn()
+        try:
+            conn.request("GET", path)
+            response = conn.getresponse()
+            return response.status, json.loads(response.read().decode("utf-8"))
+        finally:
+            conn.close()
+
+    def _question(self, counter=1, **overrides):
+        qid = f"{self.NONCE}-q{counter}"
+        payload = {
+            "qid": qid,
+            "nonce": self.NONCE,
+            "kind": "question",
+            "target": {"type": "annotation", "annotationId": "ai-1"},
+            "threadId": qid,
+            "parentQid": None,
+            "body": "Why does this matter?",
+            "askedAt": "2026-08-20T12:34:56Z",
+        }
+        payload.update(overrides)
+        return payload
+
+    def _question_path(self, qid):
+        return os.path.join(self.session_dir, "questions", qid + ".json")
+
+    def test_post_ask_writes_question_without_setting_done(self):
+        question = self._question()
+        status, body = self._post("/ask", question)
+        self.assertEqual((status, json.loads(body)), (200, {"ok": True}))
+        with open(self._question_path(question["qid"]), "r", encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), question)
+        self.assertFalse(self.done.is_set())
+
+    def test_two_asks_create_distinct_files_and_both_are_pending(self):
+        first = self._question(1)
+        second = self._question(2)
+        self.assertEqual(self._post("/ask", first)[0], 200)
+        self.assertEqual(self._post("/ask", second)[0], 200)
+        self.assertTrue(os.path.exists(self._question_path(first["qid"])))
+        self.assertTrue(os.path.exists(self._question_path(second["qid"])))
+        status, payload = self._get_json("/answers")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["answers"], [])
+        self.assertEqual(payload["pending"], [first["qid"], second["qid"]])
+
+    def test_get_answers_is_empty_before_any_questions(self):
+        status, payload = self._get_json("/answers")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {"answers": [], "pending": []})
+
+    def test_get_answers_returns_disk_answer_and_remaining_pending_qids(self):
+        first = self._question(1)
+        second = self._question(2)
+        self._post("/ask", first)
+        self._post("/ask", second)
+        answer = {
+            "qid": first["qid"],
+            "body": "Because this caller does not catch the exception.",
+            "answeredAt": "2026-08-20T12:36:00Z",
+        }
+        answer_path = os.path.join(self.session_dir, "answers", first["qid"] + ".json")
+        with open(answer_path, "w", encoding="utf-8") as fh:
+            json.dump(answer, fh)
+        status, payload = self._get_json("/answers")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["answers"], [answer])
+        self.assertEqual(payload["pending"], [second["qid"]])
+
+    def test_post_ask_wrong_or_missing_nonce_returns_409_without_writing(self):
+        for counter, nonce in ((1, "wrong"), (2, None)):
+            question = self._question(counter)
+            if nonce is None:
+                question.pop("nonce")
+            else:
+                question["nonce"] = nonce
+            status, _ = self._post("/ask", question)
+            self.assertEqual(status, 409)
+            self.assertFalse(os.path.exists(self._question_path(question["qid"])))
+
+    def test_post_ask_oversized_body_returns_413_without_writing(self):
+        question = self._question(body="x" * (review_server.MAX_BODY_BYTES + 1))
+        status, _ = self._post("/ask", question)
+        self.assertEqual(status, 413)
+        self.assertFalse(os.path.exists(self._question_path(question["qid"])))
+
+    def test_post_ask_question_body_over_4000_chars_returns_413_without_writing(self):
+        """The schema's 4000-char question cap triggers 413 independently of raw body size."""
+        question = self._question(body="x" * (review_server.MAX_QUESTION_CHARS + 1))
+        self.assertLess(len(json.dumps(question)), review_server.MAX_BODY_BYTES)
+        status, _ = self._post("/ask", question)
+        self.assertEqual(status, 413)
+        self.assertFalse(os.path.exists(self._question_path(question["qid"])))
+
+    def test_post_submit_still_writes_atomically_and_sets_done(self):
+        payload = dict(REVIEW_ANNOTATIONS_PAYLOAD, nonce=self.NONCE)
+        status, body = self._post("/submit", payload)
+        self.assertEqual((status, json.loads(body)), (200, {"ok": True}))
+        with open(self.out_path, "r", encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), payload)
+        self.assertFalse(os.path.exists(self.out_path + ".tmp"))
+        self.assertTrue(self.done.is_set())
+
+    def test_post_submit_with_large_transcript_roundtrips_intact(self):
+        """A large-but-valid transcript under MAX_BODY_BYTES is written verbatim."""
+        transcript = [
+            {
+                "qid": f"{self.NONCE}-q{i}",
+                "threadId": f"{self.NONCE}-q{i}",
+                "target": {"type": "annotation", "annotationId": f"a-{i}"},
+                "body": f"Question body number {i}: " + "x" * 2048,
+                "answer": f"Answer body number {i}: " + "y" * 2048,
+                "answered": True,
+            }
+            for i in range(100)
+        ]
+        payload = dict(REVIEW_ANNOTATIONS_PAYLOAD, nonce=self.NONCE,
+                       transcript=transcript)
+        body = json.dumps(payload).encode("utf-8")
+        self.assertLess(len(body), review_server.MAX_BODY_BYTES)
+        status, resp = self._post("/submit", body)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(resp), {"ok": True})
+        with open(self.out_path, "r", encoding="utf-8") as fh:
+            written = json.load(fh)
+        self.assertEqual(written["transcript"], transcript)
+        self.assertEqual(written["kind"], "review-annotations")
+        self.assertTrue(self.done.is_set())
+
+    def test_post_submit_with_transcript_over_max_body_bytes_returns_413(self):
+        """An oversized transcript-shaped body respects the raw MAX_BODY_BYTES guard."""
+        transcript = [
+            {
+                "qid": f"{self.NONCE}-q{i}",
+                "threadId": f"{self.NONCE}-q{i}",
+                "target": {"type": "annotation", "annotationId": "big"},
+                "body": "z" * 1024,
+                "answer": "w" * 1024,
+                "answered": True,
+            }
+            for i in range(3000)
+        ]
+        payload = dict(REVIEW_ANNOTATIONS_PAYLOAD, nonce=self.NONCE,
+                       transcript=transcript)
+        body = json.dumps(payload).encode("utf-8")
+        self.assertGreater(len(body), review_server.MAX_BODY_BYTES)
+        status, resp = self._post("/submit", body,
+                                  headers={"Content-Type": "application/json"})
+        self.assertEqual(status, 413)
+        self.assertEqual(json.loads(resp), {"error": "payload too large"})
+        self.assertFalse(os.path.exists(self.out_path))
+        self.assertFalse(self.done.is_set())
+
+    def test_post_ask_malformed_json_returns_400_and_server_keeps_serving(self):
+        status, _ = self._post("/ask", b"not json")
+        self.assertEqual(status, 400)
+        self.assertEqual(os.listdir(os.path.join(self.session_dir, "questions")), [])
+        self.assertFalse(self.done.is_set())
+        answers_status, payload = self._get_json("/answers")
+        self.assertEqual((answers_status, payload), (200, {"answers": [], "pending": []}))
+
+    def test_post_ask_rejects_invalid_qid_without_writing(self):
+        question = self._question(qid="../escape")
+        status, _ = self._post("/ask", question)
+        self.assertEqual(status, 400)
+        self.assertEqual(os.listdir(os.path.join(self.session_dir, "questions")), [])
+
+
+class QADisabledServerTestCase(unittest.TestCase):
+    def test_ask_and_answers_return_404_when_session_dir_is_not_configured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            done = threading.Event()
+            handler = review_server.build_handler(PAGE_HTML, os.path.join(tmpdir, "out.json"), done)
+            httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            thread.start()
+            try:
+                port = httpd.server_address[1]
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                conn.request("POST", "/ask", body=b"{}")
+                self.assertEqual(conn.getresponse().status, 404)
+                conn.close()
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                conn.request("GET", "/answers")
+                self.assertEqual(conn.getresponse().status, 404)
+                conn.close()
+                self.assertFalse(done.is_set())
+            finally:
+                httpd.shutdown()
+                httpd.server_close()
+                thread.join(timeout=5)
+
+
 if __name__ == "__main__":
     unittest.main()

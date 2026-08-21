@@ -745,10 +745,30 @@ enforces. Recognition is aborted on every teardown path (composer cancel, succes
 send, composer close, session end), so no recognition session outlives the UI that
 started it. On the reply side, an answer to a dictated question auto-speaks
 best-effort only, because a browser may refuse `speechSynthesis.speak()` without a
-user gesture; the guaranteed path is a read-aloud button rendered on **every** answer,
-plus a stop-speaking control shown whenever something is playing. Nothing
-voice-related is persisted (no `localStorage`, per the ephemeral-Q&A rule), and the
-question and answer wire and file formats are unchanged.
+user gesture; the guaranteed path is a read-aloud button rendered on **every** answer.
+Nothing voice-related is persisted (no `localStorage`, per the ephemeral-Q&A rule), and
+the question and answer wire and file formats are unchanged.
+
+**Stopping read-aloud has three routes, because one was not reachable.** The answer
+that is playing turns its own button into `⏹ Stop`, which stops and does not
+re-enqueue: a second click used to cancel the queue and immediately refill it, so the
+button restarted the answer instead of ending it. Any *other* answer's button still
+jumps the queue. Ownership lives in a module-level `speechOwnerQid`, claimed only by
+the `enqueueSpeech()` call that actually starts the chain — when two answers land in
+one poll tick the second joins a chain that is already talking, and moving the token
+would put `⏹ Stop` on an answer nobody has heard yet. Every label is derived from that
+token by `applyReadAloudState()` and repainted by `syncReadAloudButtons()`, never
+stored on the element, because `renderQa()` rebuilds the thread on each tick; the
+buttons are patched in place rather than through a full `renderQa()`, which would
+destroy a composer the reviewer is typing into. The session-wide control is a
+`position:fixed` pill rather than a node in `qaStatusHost`: that host sits under the
+mode banner, and audio started from a line far down a long diff had no off switch on
+screen. `Escape` stops speech too, and deliberately neither calls `preventDefault()`
+nor stops propagation, so an `Escape` meant for a composer or the browser's find bar
+still arrives. All of them funnel through `stopSpeaking()`, which releases the token
+and repaints *before* its `!window.speechSynthesis` early return, so a browser with no
+synthesiser at all still ends up with idle labels.
+
 
 **Voice support is narrower than feature detection suggests.** A present constructor
 proves only that the binding exists. Chromium maps every speech-backend failure onto

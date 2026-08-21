@@ -683,7 +683,9 @@ The exact server flags are `--session-dir`, `--nonce`, and `--max-lifetime`
 
 The Ask UI also takes spoken questions: a push-to-talk mic button dictates into the
 question box (transcript editable before sending), every answer carries a read-aloud
-button, and answers to dictated questions speak automatically. It is feature-detected,
+button, and answers to dictated questions speak automatically. Anything playing can be
+stopped from the answer's own button, from a fixed pill in the corner, or with `Escape`.
+It is feature-detected,
 so the button is absent where `SpeechRecognition` is missing (Firefox). State the
 caveat when you offer it: a browser's speech recognition may send microphone audio to
 the vendor's speech service, Chrome's does, while typing stays local.

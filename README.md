@@ -54,7 +54,9 @@ and request background on AI callouts while the review is open.
 
 Those questions can be spoken instead of typed. A mic button in the Ask box dictates
 into the question field, and every answer carries a read-aloud button, so you can
-review a diff with your hands on the code. Speech input needs Chrome, Edge or Safari;
+review a diff with your hands on the code. Whatever is playing stops from that same
+button, from a pill that stays in the corner however far you scroll, or with `Escape`.
+Speech input needs Chrome, Edge or Safari;
 Firefox doesn't ship it, and the mic button simply doesn't appear there. Some
 Chromium-based browsers, Brave among them, do show the button but have no speech
 service behind it, so dictation reports that recognition is unavailable and you type

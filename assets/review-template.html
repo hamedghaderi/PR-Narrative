@@ -214,6 +214,15 @@
   .qa-composer .qa-count{margin-top:2px;text-align:right;font-size:11px;color:var(--muted)}
   .qa-composer .actions{display:flex;gap:8px;margin-top:6px}
   .qa-mic-btn.recording{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
+  /* Read-aloud is started from an answer that can sit thousands of pixels down the
+     diff, so the control that ends it cannot live in the page flow: fixed, it is
+     wherever the reviewer already is. Bottom offset is the 96px the body already
+     reserves for the sticky footer plus a gap (and 180px + a gap once the footer
+     wraps - see the media query at the end of this sheet), and z-index is one step
+     above the footer's so the two overlays cannot bury each other. Rounded like the
+     .badge/.status-chip vocabulary: this is an overlay, not a button in a row. */
+  .qa-stop-speaking-btn{position:fixed;right:20px;bottom:108px;z-index:21;
+                        border-radius:999px;border-color:var(--muted)}
   .btn:disabled{opacity:.5;cursor:default}
   .btn:disabled:hover{background:var(--panel-bg)}
 
@@ -239,8 +248,12 @@
   #download-btn,#copy-fixlist-btn{border:1px solid var(--border);background:var(--panel-bg);color:var(--ink)}
   #submit-btn:disabled{opacity:.6;cursor:default}
   /* 180px, not 140px: three footer buttons wrap onto their own row on narrow
-     screens, and the taller footer would otherwise clip the end of the diff. */
-  @media (max-width:600px){body{padding:16px 12px 180px}.footer .footer-btns{margin-left:0;width:100%}}
+     screens, and the taller footer would otherwise clip the end of the diff.
+     The fixed stop-speaking pill rides on the same allowance: it is parked one gap
+     above whatever height the footer is reserved here, so it never lands on the
+     general-comment box. */
+  @media (max-width:600px){body{padding:16px 12px 180px}.footer .footer-btns{margin-left:0;width:100%}
+                           .qa-stop-speaking-btn{bottom:192px}}
 </style>
 </head>
 <body>
@@ -367,6 +380,9 @@
   var speechUtterance = null;      // strong ref: a collected utterance stops mid-word
   var speechSpeaking = false;      // "the queue is running", the Stop control's source
   var speechRun = 0;               // bumped on cancel; stale end/error handlers no-op
+  var speechOwnerQid = null;       // qid whose answer the queue belongs to, or null.
+                                   // The per-answer toggle reads its label off this:
+                                   // the buttons themselves are rebuilt every tick.
   var speechVoice = null;          // best voice found, or null for "browser default"
   var speechVoicePicked = false;   // true once a non-empty voice list was actually scored
   var speechVoiceBound = false;    // the voiceschanged listener is registered once
@@ -2001,13 +2017,62 @@
     return !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
   }
 
+  // Every path that silences the page comes through here - the pill, Esc, a second
+  // click on a playing answer, endQaSession(), pagehide - so releasing ownership and
+  // repainting the controls belongs here too, before the early return: a browser with
+  // no speechSynthesis at all still has to leave the labels in their idle state.
   function stopSpeaking() {
     speechQueue.length = 0;
     speechUtterance = null;
     speechSpeaking = false;
+    speechOwnerQid = null;
     speechRun += 1;   // whatever the cancelled utterance fires next is now stale
+    syncReadAloudButtons();
+    renderSpeechStopPill();
     if (!window.speechSynthesis) return;
     try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+
+  // The one control that is not anchored to any answer. It replaces the stop button
+  // that used to render into qaStatusHost under the mode banner: that host is the top
+  // of a page which is mostly diff, so audio started from a line far down had no
+  // reachable off switch. Created on demand and removed on the way out rather than
+  // hidden, so a browser without speechSynthesis never holds a dead control.
+  var speechStopPill = null;
+
+  function renderSpeechStopPill() {
+    if (!(speechSpeaking && speechSupported())) {
+      if (speechStopPill) { speechStopPill.remove(); speechStopPill = null; }
+      return;
+    }
+    if (speechStopPill) return;
+    speechStopPill = el("button", "btn small qa-stop-speaking-btn", "⏹ Stop speaking");
+    speechStopPill.type = "button";
+    speechStopPill.title = "Stop reading aloud (Esc)";
+    speechStopPill.addEventListener("click", function () {
+      stopSpeaking();
+      renderQaStatus();
+    });
+    document.body.appendChild(speechStopPill);
+  }
+
+  // A toggle's label is a function of speechOwnerQid, computed here and nowhere else.
+  // dataset.qid is the button's only durable identity; anything remembered on the
+  // element is gone the next time renderQa() rebuilds the thread.
+  function applyReadAloudState(btn) {
+    var qid = btn.dataset.qid;
+    var mine = !!(speechSpeaking && qid && qid === speechOwnerQid);
+    btn.textContent = mine ? "⏹ Stop" : "🔊 Read aloud";
+    btn.title = mine ? "Stop reading this answer aloud" : "Read this answer aloud";
+    btn.setAttribute("aria-pressed", mine ? "true" : "false");
+  }
+
+  // Patched in place on every speech transition. renderQaStatus() rebuilds only the
+  // status block and would leave a stale "⏹ Stop" sitting on an answer that finished
+  // a minute ago; a full renderQa() would fix the labels and destroy any composer the
+  // reviewer is typing into, which is the worse trade.
+  function syncReadAloudButtons() {
+    Array.prototype.forEach.call(document.querySelectorAll(".qa-read-btn"), applyReadAloudState);
   }
 
   function speakNext() {
@@ -2016,7 +2081,9 @@
     if (text == null) {
       speechSpeaking = false;
       speechUtterance = null;
+      speechOwnerQid = null;
       renderQaStatus();   // the Stop control is state-derived: it goes away here
+      syncReadAloudButtons();   // and so is the toggle, which that call does not touch
       return;
     }
     var run = speechRun;
@@ -2046,11 +2113,17 @@
     }
   }
 
-  function enqueueSpeech(chunks) {
+  function enqueueSpeech(chunks, qid) {
     if (!speechSupported() || !chunks || !chunks.length) return;
     chunks.forEach(function (c) { speechQueue.push(c); });
     if (speechSpeaking) return;   // the running chain will pick these up in order
     speechSpeaking = true;
+    // Only the enqueue that actually starts the queue claims it. When two answers land
+    // in one poll tick the second joins a chain that is already talking, and moving
+    // the token would put "⏹ Stop" on an answer nobody has heard a word of yet.
+    speechOwnerQid = typeof qid === "string" ? qid : null;
+    syncReadAloudButtons();
+    renderSpeechStopPill();
     speakNext();
   }
 
@@ -2071,17 +2144,25 @@
   // sanitizes down to nothing (all code) still gets the button: enqueueSpeech() no-ops
   // on an empty chunk list, so the click stops any current speech and says nothing,
   // which beats a button that is there on some answers and not others.
-  function appendReadAloudButton(msg, body) {
+  function appendReadAloudButton(msg, body, qid) {
     if (!speechSupported()) return;
     var chunks = toSpeechText(body);
     var host = el("div", "qa-actions");
-    var btn = el("button", "btn small qa-read-btn", "🔊 Read aloud");
+    var btn = el("button", "btn small qa-read-btn");
     btn.type = "button";
-    btn.title = "Read this answer aloud";
+    if (typeof qid === "string" && qid) btn.dataset.qid = qid;
+    // Label and aria-pressed come from state, not from a default: this node may well
+    // be built by the very poll tick that started reading this answer aloud, in which
+    // case it has to appear already showing "⏹ Stop".
+    applyReadAloudState(btn);
     btn.addEventListener("click", function () {
+      // Reading this answer already? Then the button means stop, and stopping is the
+      // whole action - re-enqueueing here is what used to restart it from the top.
+      // Any other answer still jumps the queue, so stopSpeaking() stays first.
+      var mine = speechSpeaking && speechOwnerQid === qid;
       stopSpeaking();        // an explicit click jumps the queue
-      enqueueSpeech(chunks);
-      renderQaStatus();      // surface Stop now, not on the next poll tick
+      if (!mine) enqueueSpeech(chunks, qid);
+      renderQaStatus();      // surface the session line now, not on the next tick
     });
     host.appendChild(btn);
     msg.appendChild(host);
@@ -2092,7 +2173,7 @@
     msg.appendChild(el("span", "qa-label", "Agent"));
     if (q.answer) {
       msg.appendChild(el("div", "qa-text", q.answer));
-      appendReadAloudButton(msg, q.answer);
+      appendReadAloudButton(msg, q.answer, q.qid);
     } else if (q.kind === "background-request") {
       msg.appendChild(el("div", "qa-text qa-muted", "Background added to this finding."));
     } else {
@@ -2245,20 +2326,11 @@
       qaStatusHost.appendChild(el("div", "qa-notice",
         "Waiting on " + MAX_PENDING + " questions. Asking is paused until one is answered."));
     }
-    // Derived from speechSpeaking on every pass, because this host is cleared and
-    // rebuilt on each poll tick - a control kept as a DOM node would not survive one.
-    if (speechSpeaking && speechSupported()) {
-      var stopHost = el("div", "qa-actions");
-      var stopBtn = el("button", "btn small qa-stop-speaking-btn", "⏹ Stop speaking");
-      stopBtn.type = "button";
-      stopBtn.addEventListener("click", function () {
-        stopSpeaking();
-        renderQaStatus();
-      });
-      stopHost.appendChild(stopBtn);
-      qaStatusHost.appendChild(stopHost);
-    }
     qaStatusHost.style.display = qaStatusHost.childElementCount ? "" : "none";
+    // The stop control no longer renders into this host - it is fixed to the viewport
+    // now - but it is still driven from here, so it stays derived from speechSpeaking
+    // on the same every-tick pass that rebuilds everything else above.
+    renderSpeechStopPill();
   }
 
   // Fallback host only: threads whose lines are not on this page. Empty is the
@@ -2378,7 +2450,7 @@
       // qaQuestions is in ask order, so walking it is askedAt order without a sort:
       // two answers landing in one tick queue up, they never talk over each other.
       qaQuestions.forEach(function (q) {
-        if (speakQids.indexOf(q.qid) !== -1) enqueueSpeech(toSpeechText(q.answer));
+        if (speakQids.indexOf(q.qid) !== -1) enqueueSpeech(toSpeechText(q.answer), q.qid);
       });
     }
     if (gotBackground) renderAnnotations();   // details block appears, button goes away
@@ -2540,6 +2612,16 @@
     window.addEventListener("beforeunload", onBeforeUnload);
     // Leaving or backgrounding the page must not leave a voice running behind it.
     window.addEventListener("pagehide", function () { stopSpeaking(); });
+    // Esc is the reflex for "make it stop", and it is the one route to silence that
+    // needs neither the mouse nor knowing where the pill is. It acts only while
+    // something is actually being read, and it neither preventDefault()s nor stops
+    // propagation, so an Esc meant for a composer, a native autocomplete, or the
+    // browser's own find bar still reaches it.
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape" || !speechSpeaking) return;
+      stopSpeaking();
+      renderQaStatus();
+    });
   }
 })();
 </script>

@@ -76,6 +76,12 @@ unaccepted, so nothing reaches GitHub that you didn't keep. On Submit, your acce
 comments post as a single pending review that you finalize yourself on github.com.
 Reviewing a local branch posts nothing anywhere.
 
+The generated page is fully self-contained: its typefaces ship with the skill as
+embedded WOFF2, so it makes **no network requests at all**, renders identically for
+everyone regardless of what fonts are installed locally, and works opened straight
+off disk over `file://` — on a plane, or on a machine that has never seen a font CDN.
+Licences and provenance are in [`assets/fonts/NOTICE.md`](assets/fonts/NOTICE.md).
+
 ### Author mode
 
 Branch diff → narrative PR body → section-by-section approval → revision loop →

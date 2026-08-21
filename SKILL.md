@@ -587,8 +587,8 @@ serving the page. The full definition lives in `references/reviewer-ui.md` §2 a
 only four line-comment categories (probable bugs/logic errors, security issues, missing
 error handling on new paths, breaking-change risk to callers); hard caps of **≤3 per
 file, ≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`,
-and every `severity: "important"` draft also carries `disproof`, the smallest check
-that would prove the concern **false** (if you can't name one, it isn't important:
+and every `severity: "blocking"` draft also carries `disproof`, the smallest check
+that would prove the concern **false** (if you can't name one, it isn't blocking:
 demote it or drop it, and never invent a test for something untestable);
 when nothing qualifies, seed zero; an empty set is a correct outcome, not a failure.
 Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excluded from
@@ -623,7 +623,7 @@ Two rules are worth stating twice:
 
 - **Start with what goes wrong for a person, not with what is wrong in the code.** Do this
   only when the evidence supports a result. When it does not, §2c tells you to say the
-  smallest thing you can prove, then mark the finding `nit` or drop it. Never invent an
+  smallest thing you can prove, then mark the finding `should_fix` or drop it. Never invent an
   effect.
 - **Use simple English.** Write so a developer with strong technical skills but weaker
   English understands the comment on the first read. Short sentences, common words, no
@@ -646,7 +646,7 @@ None of this changes the locked pre-seed policy above. Do not add categories. Li
 comments go only on changed lines, and the one file-scoped exception is `file_split`
 under `references/reviewer-ui.md` §2d, on its own separate budget. Do not raise either
 set of caps, add values to the `severity` enum, change the zero-findings outcome, or
-leave out the required `disproof` on an `important` finding.
+leave out the required `disproof` on an `blocking` finding.
 
 ### 4. Build the page, serve it, and wait
 
@@ -654,8 +654,9 @@ Build the annotation page from `assets/review-template.html` following
 `references/reviewer-ui.md` §1: run `scripts/diff_anchor.py` against the files JSON
 to get `{files, overflowFiles}`, wrap that into the full diff-JSON contract
 (`references/annotation-schema.md` §2, which adds `mode`, `repo`, `prNumber`, `prUrl`,
-`branch`, `headRefOid`, `narrativeHtml`, `aiAnnotations`), substitute the two
-injection markers, and save it: PR path to
+`branch`, `headRefOid`, `narrativeHtml`, `aiAnnotations`), substitute the three
+injection markers (`__FONT_CSS__` first — see `references/reviewer-ui.md` §1 for
+why the order matters), and save it: PR path to
 `/tmp/YYYY-MM-DD-pr-annotate-<repo>-<n>.html`, local path to
 `/tmp/YYYY-MM-DD-review-<branch>.html`.
 
@@ -929,7 +930,7 @@ question cannot produce a review verdict.
   > changes: Confirmed / Partly / Not a bug / Intended. Please do not change any
   > code until we have discussed the verdicts.
 
-  The page itself also offers a **📋 Copy fix-list** button (local mode only) that
+  The page itself also offers a **Copy fix-list** button (local mode only) that
   copies the accepted findings in the same §4 format **without** the handoff
   paragraph; that paragraph is addressed to you, not to the user's clipboard. Your
   printed fix-list still appends it verbatim.
@@ -944,10 +945,10 @@ question cannot produce a review verdict.
 - If you seeded AI drafts, they stayed inside the caps (≤3/file, ≤10/review). Each one
   has a severity and a reason. Each one looks clearly different from a user comment on
   the page. None was accepted for the user.
-- Every `important` AI draft has a `disproof` the author can actually run. It does not
+- Every `blocking` AI draft has a `disproof` the author can actually run. It does not
   just repeat the concern. It tests **the same result, in the same part of the system,
   that the body named**: if the body says a page can fail, showing that a helper throws
-  is not enough. Any finding you could not test was marked `nit` or dropped, never
+  is not enough. Any finding you could not test was marked `should_fix` or dropped, never
   shipped with an invented check.
 - Every AI draft body meets the §2c bar. The test that catches the most mistakes:
   **does the first sentence say what goes wrong for a person, rather than what is wrong
@@ -961,10 +962,10 @@ question cannot produce a review verdict.
   is not a native English speaker: if it takes two reads, rewrite it before serving the
   page.
 - No result was invented to follow the order. Where you could prove only a mechanism,
-  the draft says only that, and it was marked `nit` or dropped per §2c instead of being
+  the draft says only that, and it was marked `should_fix` or dropped per §2c instead of being
   given an effect nobody traced.
 - No draft is longer than its severity needs, and none sounds more serious than it is. A
-  four-paragraph `nit` is a defect. So is an `important` finding squeezed into a phrase
+  four-paragraph `should_fix` is a defect. So is an `blocking` finding squeezed into a phrase
   that explains nothing.
 - For PR mode, the response after posting actually contains `"state": "PENDING"`;
   if it doesn't, stop and work through the error table in

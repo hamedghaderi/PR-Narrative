@@ -150,8 +150,9 @@ copied straight from `references/html-visual.md`. You're writing the *inner* HTM
 goes inside the existing `#narrative` container, not a full page, so no need to
 re-embed CSS.
 
-**Substitute the two injection markers** (`__REVIEW_DATA__` and `__NARRATIVE_HTML__`,
-each appearing exactly once in the template) and write the finished page:
+**Substitute the three injection markers** (`__FONT_CSS__`, `__REVIEW_DATA__` and
+`__NARRATIVE_HTML__`, each appearing exactly once in the template) and write the
+finished page:
 
 ```bash
 python3 - <<'PYEOF'
@@ -159,6 +160,14 @@ import json
 
 page = open("/tmp/pr-review-build.html").read()
 diff_json = json.load(open("/tmp/pr-{n}-diff.json"))
+fonts = open("assets/review-fonts.css").read()   # from the skill directory
+
+# __FONT_CSS__ goes FIRST, and the order is not cosmetic. The diff JSON contains
+# the reviewed diff's own source lines, so it can contain any literal string -
+# including "__FONT_CSS__". Substituting data first would let a later font
+# substitution fire inside the injected data. The font CSS is base64, whose
+# alphabet has no underscore, so it can never contain a marker itself.
+page = page.replace("__FONT_CSS__", fonts)
 
 # "</" -> "<\/": a diff line containing "</script>" would otherwise close the
 # script#review-data element at HTML-parse time. JSON.parse reads "<\/" back
@@ -169,6 +178,15 @@ page = page.replace("__NARRATIVE_HTML__", diff_json["narrativeHtml"])
 open("/tmp/2026-07-22-pr-annotate-{r}-{n}.html", "w").write(page)
 PYEOF
 ```
+
+> [!NOTE]
+> **Fonts are embedded, so the page makes zero network requests.**
+> `assets/review-fonts.css` carries Instrument Serif, Instrument Sans and
+> JetBrains Mono as base64 WOFF2, which is why every reviewer sees the same page
+> whatever is installed locally, and why it still renders correctly opened
+> straight off disk with `file://`. Provenance, licences and checksums are in
+> `assets/fonts/NOTICE.md`. Do not swap the `@font-face` block for a Google Fonts
+> `<link>`: that reintroduces a network dependency and breaks offline review.
 
 > [!IMPORTANT]
 > The `.replace("</", "<\\/")` on the dumped JSON is required for this to work. It is not
@@ -215,18 +233,18 @@ exception to this list. It relaxes nothing else in this section.
   until it's at ≤10 per review. File-structure findings under §2d have their own
   budget and do **not** consume either cap.
 - **Every AI annotation carries `severity` and one-sentence `reasoning`**: no
-  unexplained flags. `severity` is one of `"important" | "nit" | "pre_existing"`
+  unexplained flags. `severity` is one of `"blocking" | "should_fix" | "pre_existing"`
   (`references/annotation-schema.md` §1); never a value outside that set.
-- **Every `severity: "important"` annotation also carries `disproof`**: the smallest
+- **Every `severity: "blocking"` annotation also carries `disproof`**: the smallest
   concrete check that would prove the concern **false**. Write the check that would
   make you withdraw the comment, not one more argument for why you're right. Prefer a
   test the author can actually run ("assert `formatDate(null)` still returns `''`");
   fall back to a command to run or an output to look at only when the concern isn't
   testable. If you can't name a check that would settle it, you don't understand the
-  risk well enough to call it important: drop it to `"nit"` or drop it entirely.
+  risk well enough to call it blocking: drop it to `"should_fix"` or drop it entirely.
   **Never invent a plausible-looking test for a concern that can't be tested**: a
   fabricated check is worse than the sentence it replaced, because it reads as
-  evidence. `nit` and `pre_existing` annotations omit `disproof`.
+  evidence. `should_fix` and `pre_existing` annotations omit `disproof`.
 - **When nothing qualifies, seed ZERO.** An empty `aiAnnotations` array is a correct,
   expected outcome; silence is fine. Do not manufacture a comment just to have
   something to show.
@@ -253,7 +271,7 @@ is REQUIRED on every AI annotation and must be a stable agent-chosen string (for
 `"ai-1"`), because on-demand background requests and Q&A threads reference it.
 Each one has shape `{id, scope, type, filePath, lineStart, lineEnd, side, body,
 suggestedCode?, background?, origin: "ai", accepted: false, severity, reasoning, disproof?}`
-(`disproof` present exactly when `severity` is `"important"`; `background` is optional
+(`disproof` present exactly when `severity` is `"blocking"`; `background` is optional
 and governed by §2c below).
 
 File-structure findings, which sit outside these caps, are defined in §2d below. A
@@ -274,8 +292,8 @@ Everything in §2 carries over **unchanged** except the category list:
 - **Same hard caps**: **≤3 per file, ≤10 per review**, counted against the whole
   `aiAnnotations` array before injection. Trim by severity, silently, to stay under both.
 - **Same required fields**: every annotation carries `severity` and a one-sentence
-  `reasoning`, and every `severity: "important"` one also carries `disproof`.
-  `severity` stays one of `"important" | "nit" | "pre_existing"`; a security focus
+  `reasoning`, and every `severity: "blocking"` one also carries `disproof`.
+  `severity` stays one of `"blocking" | "should_fix" | "pre_existing"`; a security focus
   does not earn a new severity tier.
 - **Same injection contract**: always `origin: "ai"`, `accepted: false`, so drafts are
   excluded from submission until the user explicitly accepts them in the UI.
@@ -302,8 +320,8 @@ Category 5 is the one that most often has no honest `disproof`: "this new depend
 might be malicious" is not something a test can refute. When that happens, do not
 manufacture a check to satisfy the field. Either name a real verifiable step (the
 advisory ID to look up, the `npm audit`/`pip-audit` invocation, the published
-checksum to compare) or set `severity` to `"nit"` and leave `disproof` off. The rule
-in §2 holds here: an unfalsifiable concern is not an `"important"` finding.
+checksum to compare) or set `severity` to `"should_fix"` and leave `disproof` off. The rule
+in §2 holds here: an unfalsifiable concern is not an `"blocking"` finding.
 
 This variant is **locked**, same as §2: do not widen the categories, do not raise the
 caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,
@@ -360,7 +378,7 @@ Start with the **closest** result your evidence supports, not the worst one you 
 of. "This record fails to render", which you can trace, is better than "the page goes
 down", which you cannot.
 
-For an `important` finding, do not start with exception handling, query behavior,
+For an `blocking` finding, do not start with exception handling, query behavior,
 transaction order, code history, or how one class relates to another. Those are supporting
 evidence.
 
@@ -381,11 +399,11 @@ be clear about what that does and does not show:
 - "This runs one query per row" may be provable when "the page can time out" is not.
 - "These two locks are taken in opposite order" may be exact when you cannot prove that a
   deadlock can really happen.
-- "This new branch has no test" can be an honest `nit` with no real failure attached.
+- "This new branch has no test" can be an honest `should_fix` with no real failure attached.
 
 Having only the mechanism may mean the finding is less serious. It does not allow you to
 add more. Under the locked policy in §2, if the mechanism does not show one of the allowed
-risks, mark the finding as `nit` or drop it. Never invent an effect just to follow the
+risks, mark the finding as `should_fix` or drop it. Never invent an effect just to follow the
 order in this section.
 
 ### Keep the order, but vary the words
@@ -414,7 +432,7 @@ you checked that nothing fixes it later.
 
 ### Write the opening and the `disproof` together
 
-For an `important` finding, write the first sentence and the `disproof` at the same time.
+For an `blocking` finding, write the first sentence and the `disproof` at the same time.
 **The `disproof` must test the same problem, in the same place, that the first sentence
 described.**
 
@@ -469,9 +487,9 @@ disappears.
 
 | Finding | Shape |
 |---|---|
-| `important`, and the reason is not obvious | Result, plain explanation, the evidence that connects them, action. Short paragraphs. |
-| `important`, but clear as soon as you say it | Result, the smallest explanation needed, action. Drop the example. |
-| `nit` or `pre_existing` | One or two direct sentences. Never four parts. Give a result only when it is real and you can show it. |
+| `blocking`, and the reason is not obvious | Result, plain explanation, the evidence that connects them, action. Short paragraphs. |
+| `blocking`, but clear as soon as you say it | Result, the smallest explanation needed, action. Drop the example. |
+| `should_fix` or `pre_existing` | One or two direct sentences. Never four parts. Give a result only when it is real and you can show it. |
 
 **This is an exception to the rule above.** Start with a result when you have a real one.
 Some small findings have no real effect on anyone: a style point, a naming question, a
@@ -511,9 +529,9 @@ problem is:
 - a cosmetic improvement
 
 Write it in the text. **Do not put it in `severity`**, which stays exactly
-`"important" | "nit" | "pre_existing"` per `references/annotation-schema.md` §1 and gains
+`"blocking" | "should_fix" | "pre_existing"` per `references/annotation-schema.md` §1 and gains
 no new values for this. Problem type and severity are separate. A performance issue can be
-`important`. A correctness bug in dead code can be a `nit`.
+`blocking`. A correctness bug in dead code can be a `should_fix`.
 
 ### Use simple English
 
@@ -640,7 +658,7 @@ background:
 - Does it describe behavior that can really happen, instead of repeating the code?
 - Does the wording match the evidence: "will" for always, "can" for sometimes, or a stated
   condition?
-- For an `important` finding, does the `disproof` test the same result, in the same part of
+- For an `blocking` finding, does the `disproof` test the same result, in the same part of
   the system, that the first sentence named?
 - Are links between files and classes explained instead of assumed?
 - Is the history of how the code got this way gone?
@@ -654,8 +672,8 @@ background:
 
 If you cannot explain a finding simply, the problem is usually your own understanding, not
 the wording. Fix that first. If it still will not come out clearly, it is not ready: mark
-it `nit` or drop it. This works together with the `disproof` rule in §2, which already says
-that a concern you cannot test is not an `important` finding.
+it `should_fix` or drop it. This works together with the `disproof` rule in §2, which already says
+that a concern you cannot test is not an `blocking` finding.
 
 ### A rewrite, in three passes
 
@@ -717,7 +735,7 @@ Result-first:
 
 Notice what this comment does **not** say. It does not say that retries are dropped or
 records are lost, because the evidence does not show either one. This is a maintainability
-concern that depends on a future change, so it is a `nit` unless the retry window is really
+concern that depends on a future change, so it is a `should_fix` unless the retry window is really
 expected to change. Keep the claim this small. The result it states is the strongest one
 the evidence supports.
 
@@ -762,8 +780,8 @@ and the point of §2 is to not produce that.
   build or tests that would make you withdraw the advice. For example, "if the two
   responsibilities share private state that cannot be extracted without exporting it,
   this advice is void." That is concrete and checkable, so a `file_split` finding may
-  legitimately carry `severity: "important"`. If you cannot name such a check, set
-  `"nit"` or drop the finding, exactly as in §2. Never invent one.
+  legitimately carry `severity: "blocking"`. If you cannot name such a check, set
+  `"should_fix"` or drop the finding, exactly as in §2. Never invent one.
 - **Do not recommend a split that cannot be made safely.** If the pieces would have to
   ship together anyway, if separating them leaves a non-building intermediate state, or
   if the churn is out of proportion to the benefit, there is no finding. Say nothing.
@@ -928,8 +946,8 @@ actually confirmed. Do not shorten it, reorder it, or drop the
 ### 5.1 The in-page "Copy fix-list" button
 
 The page can also produce that same Markdown without waiting for the agent. The
-sticky footer carries a third, secondary button (`#copy-fixlist-btn`,
-"📋 Copy fix-list"), styled like `#download-btn` because copying is not the primary
+closing card carries a third, secondary button (`#copy-fixlist-btn`,
+"Copy fix-list"), styled like `#download-btn` because copying is not the primary
 action, that serializes the current annotation state to the clipboard on click. It's
 for the case where the user wants the findings *somewhere else* right now (a chat
 message, an issue, a scratch file) rather than waiting for a submit round-trip.
@@ -1035,7 +1053,7 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": true,
-      "severity": "important",
+      "severity": "blocking",
       "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
       "disproof": "Render a record with an unparseable date through the page path this concern names. If the page still renders, or that input cannot reach formatDate, the concern is wrong."
     },
@@ -1050,7 +1068,7 @@ if the two ever disagree, `references/annotation-schema.md` is authoritative.
       "body": "The new invalid-date branch in formatDate.js isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
       "origin": "ai",
       "accepted": false,
-      "severity": "nit",
+      "severity": "should_fix",
       "reasoning": "New error path in formatDate.js has no corresponding assertion in this test file."
     }
   ]

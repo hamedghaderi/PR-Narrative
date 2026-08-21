@@ -4,91 +4,291 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PR review: annotate diff</title>
+
+<!-- Injection point 3 of 3: replaced with assets/review-fonts.css verbatim.
+     Separate file only so this template stays readable - it is a ~300KB base64
+     blob. Inlining it is what keeps the generated page at zero network requests. -->
+<style id="font-faces">__FONT_CSS__</style>
+
 <style>
   :root{
-    --ink:#1b1f24; --muted:#57606a; --border:#d0d7de; --panel-bg:#f6f8fa;
-    --green-bg:#dafbe1; --green-border:#4ac26b; --green-text:#116329;
-    --red-bg:#ffebe9; --red-border:#ff8182; --red-text:#82071e;
-    --gray-bg:#eaeef2; --gray-text:#6e7781;
-    --amber-bg:#fff8c5; --amber-border:#d4a72c; --accent:#0969da;
+    /* ----------------------------------------------------------------------
+       Design tokens. Every colour is the MODAL colour of a flat region of the
+       source design, measured with
+       .sisyphus/evidence/reviewer-page-redesign/renders/hist.swift - not
+       eyeballed. Anything derived rather than measured is marked "derived".
+       ---------------------------------------------------------------------- */
+
+    /* surfaces */
+    --paper:#F7F4EF;        /* page + top bar */
+    --card:#FFFFFF;         /* narrative / file / finding cards */
+    --sunken:#F3EFE8;       /* quiet chips, inline code, Draft pill */
+    --rail:#FBFAF7;         /* file-header + hunk-header bands */
+
+    --border:#DBD7D2;       /* all hairlines */
+    --track:#E6E0D6;        /* progress-bar track */
+
+    /* ink */
+    --ink:#16181A;          /* headings; also the dark footer background */
+    --ink-soft:#2C2F31;     /* body copy */
+    --muted:#4C4842;        /* secondary text, chip labels */
+    --faint:#98918A;        /* hunk headers, meta lines, keyboard hints */
+    --on-dark:#F7F4EF;      /* text on the dark footer */
+    --on-dark-muted:#9A9A95;
+    /* derived: --on-dark at low alpha, for hairlines and fills on the dark card */
+    --on-dark-line:rgba(247,244,239,.26);
+    --on-dark-fill:rgba(247,244,239,.06);
+    --on-dark-fill-hi:rgba(247,244,239,.10);
+    --white:#FFFFFF;        /* text on saturated fills; the emphasised dark-card button */
+
+    /* teal - the single accent */
+    --teal:#0D7D7D;         /* buttons, progress fill, every link */
+    --teal-deep:#0A5F4F;    /* added-line text, Accepted pill ink */
+    --mint:#F0F6F4;         /* "in one sentence" callout */
+    --mint-pill:#E7F2F0;    /* sidebar active item, Accepted pill */
+
+    /* sage - reserved for the "already on GitHub" vocabulary.
+       Measured from the design's before/after panel, where it is the only
+       other tinted family present, so the three comment vocabularies stay
+       distinguishable without inventing a colour. */
+    --sage:#F2F6F0;
+    --sage-line:#6B7A63;
+    --sage-ink:#4F5B49;     /* derived: --sage-line darkened for text contrast */
+
+    /* diff + semantic */
+    --add-bg:#E4F2EE; --add-ink:#0A5F4F;
+    --del-bg:#FBE9E5; --del-ink:#8F3B2E;
+    --danger:#C2402F;                          /* "N blocking drafts", counts */
+    --blocking-bg:#FBE9E5; --blocking-ink:#A53223;
+    --warn-bg:#FBF1DE;     --warn-ink:#8A5F13;  /* "Should fix" chip */
+    --warn:#B07D1A;                            /* amber counts on --paper */
+    /* derived: selection + hover states, absent from the design */
+    --add-sel:#D3E9E2; --del-sel:#F6DAD3; --row-hover:#F3EFE8;
+
+    /* ----------------------------------------------------------------------
+       Type. Sizes are the design's own values, read from the PDF content
+       stream's Tf operators (logical viewport 865x3247 px), corroborated by
+       measured ink heights. Body is 15px - the size used by 39 of the text
+       runs, more than any other.
+
+       Weight limits are hard constraints of the real fonts, not preferences.
+       See assets/fonts/NOTICE.md:
+         - Instrument Serif is STATIC REGULAR ONLY. Never ask for >400; the
+           browser would synthesise a faux-bold, which on a high-contrast serif
+           looks visibly broken. Hence --wt-display and font-synthesis:none.
+         - Instrument Sans spans 400-700 only. There is no 200 or 300.
+       ---------------------------------------------------------------------- */
+    --font-display:"Instrument Serif",Iowan Old Style,Palatino,Georgia,serif;
+    --font-sans:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+    --wt-display:400;       /* the only weight Instrument Serif has */
+    --wt-body:400;
+    --wt-medium:500;
+    --wt-semi:600;
+
+    --fs-h1:44px;    --lh-h1:1.06;
+    --fs-footer:28px;
+    --fs-h2:25px;
+    --fs-title:22px;
+    --fs-body:15px;  --lh-body:1.62;
+    --fs-meta:13px;
+    --fs-small:12.5px;
+    --fs-micro:11.5px;
+    --fs-label:11px;
+
+    /* layout - the design's measure, from the same 865px logical viewport */
+    --measure:660px;
+    --sidebar:240px;
+    --gutter:48px;
+    /* Fallback only. renderShell() overwrites this with the bar's measured
+       height and keeps it in sync on resize, so the sticky sidebar offset cannot
+       drift out of step with the bar's real size. */
+    --topbar-h:64px;
   }
   *{box-sizing:border-box}
-  body{margin:0;padding:24px 20px 96px;background:#fff;color:var(--ink);
-       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
-  .wrap{max-width:960px;margin:0 auto}
-  h1{font-size:24px;margin:0 0 6px}
-  h2{font-size:19px;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-  h3{font-size:15px;margin:26px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  body{margin:0;padding:0;background:var(--paper);color:var(--ink-soft);
+       font-family:var(--font-sans);font-weight:var(--wt-body);
+       font-size:var(--fs-body);line-height:var(--lh-body);
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--measure);margin:0 auto}
+
+  /* Display face: one weight, and never synthesised. */
+  h1,h2,h3,.display{font-family:var(--font-display);font-weight:var(--wt-display);
+                    font-synthesis:none;font-synthesis-weight:none;color:var(--ink)}
+  h1{font-size:var(--fs-h1);line-height:var(--lh-h1);letter-spacing:-.004em;margin:0 0 10px}
+  h2{font-size:var(--fs-h2);line-height:1.16;margin:0 0 14px}
+  h3{font-size:var(--fs-title);line-height:1.2;margin:26px 0 10px}
+  /* Uppercase section labels inside the narrative are sans, not display. */
+  .eyebrow{font-family:var(--font-sans);font-weight:var(--wt-medium);
+           font-size:var(--fs-label);text-transform:uppercase;letter-spacing:.085em;
+           color:var(--faint)}
   p{margin:0 0 14px}
-  .subtitle{color:var(--muted);font-size:14px;margin-bottom:4px}
-  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  a{color:var(--teal)}
+  .subtitle{color:var(--faint);font-size:var(--fs-meta);margin-bottom:4px}
+  /* Ligatures off on every code surface: JetBrains Mono renders -> as an arrow
+     and => as a double arrow by default, which in a diff hides what the source
+     literally says and breaks any suggestion the reviewer copies. */
+  code,.mono,pre,textarea.code{font-family:var(--font-mono);font-size:var(--fs-small)}
+  /* JetBrains Mono ships calt/liga on: it renders -> as an arrow and => as a
+     double arrow. In a diff that hides what the source literally says and breaks
+     any suggestion the reviewer copies, so it is off on every code surface.
+     This list must name every selector that sets font-family:var(--font-mono) -
+     grep that string before adding a new one. Deliberately NOT applied globally:
+     the body face uses fi/fl ligatures and the design keeps them. */
+  code,.mono,pre,textarea.code,.badge,
+  .file-head .fname,.file-head .counts,.hunk-header,.diff-line,
+  .anno .anno-code,.gh-where,.composer .anchor-note,
+  .qa-thread .qa-target,.overflow .of-counts{
+    font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
 
-  /* ---- mode banner ---- */
-  .mode-banner{border:1px solid var(--border);border-left:4px solid var(--accent);
-               background:#ddf4ff;border-radius:6px;padding:10px 16px;margin:0 0 18px;font-size:13.5px}
-  .mode-banner.local{border-left-color:var(--amber-border);background:var(--amber-bg)}
-  .mode-banner b{display:block;margin-bottom:2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  /* Host for session-level notices, sitting where the mode banner used to.
+     Empty in the common case; the Q&A status block and the pending-question
+     card render into it. */
+  #shell-notices:not(:empty){margin:0 0 18px}
 
-  /* ---- narrative panel (reused panel/callout look from html-visual.md) ---- */
-  .panel{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;margin:0 0 22px}
-  .panel-head{padding:10px 14px;font-weight:600;font-size:13.5px;border-bottom:1px solid var(--border);
-              background:var(--panel-bg);display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
-  .panel-head .toggle{color:var(--muted);font-size:12px;margin-left:auto}
-  .panel-body{padding:14px 16px}
+  /* ---- cards ---- */
+  .panel{border:1px solid var(--border);border-radius:12px;background:var(--card);margin:0 0 22px}
+  .panel-head{padding:16px 20px;border-bottom:1px solid var(--border);background:var(--card);
+              border-radius:12px 12px 0 0;
+              display:flex;align-items:baseline;gap:10px;cursor:pointer;user-select:none}
+  .panel-title{font-family:var(--font-display);font-weight:var(--wt-display);font-synthesis:none;
+               font-size:var(--fs-title);line-height:1.2;color:var(--ink)}
+  .panel-sub{font-size:var(--fs-meta);color:var(--faint)}
+  .panel-head .toggle{margin-left:auto;color:var(--teal);font-size:var(--fs-meta);
+                      font-weight:var(--wt-medium)}
+  .panel-body{padding:18px 20px}
+  .panel.collapsed .panel-head{border-bottom:0;border-radius:12px}
   .panel.collapsed .panel-body{display:none}
-  .callout{border-left:4px solid var(--accent);background:#ddf4ff;padding:12px 16px;
-           border-radius:6px;margin:18px 0;font-size:14.5px}
-  .callout.tip{border-left-color:var(--green-border);background:var(--green-bg)}
-  .callout b{display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .callout{background:var(--mint);padding:16px 18px;border-radius:10px;margin:18px 0;
+           font-size:var(--fs-body)}
+  .callout.tip{background:var(--sage)}
+  .callout b{display:block;margin-bottom:6px;font-family:var(--font-sans);
+             font-weight:var(--wt-medium);font-size:var(--fs-label);text-transform:uppercase;
+             letter-spacing:.085em;color:var(--teal-deep)}
+
+  /* ---- diff heading + filter pills ---- */
+  .diff-bar{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:0 0 16px}
+  .diff-bar h2{margin:0}
+  .filters{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font:inherit;font-family:var(--font-sans);font-size:var(--fs-label);
+        font-weight:var(--wt-medium);cursor:pointer;border:1px solid var(--border);
+        border-radius:999px;padding:5px 13px;background:var(--card);color:var(--muted)}
+  .pill:hover{background:var(--sunken);color:var(--ink)}
+  /* aria-pressed is the state, so the styling hangs off it rather than a parallel
+     class that could drift out of sync with what screen readers are told. */
+  .pill[aria-pressed="true"]{background:var(--mint-pill);border-color:var(--teal);
+                             color:var(--teal-deep)}
+  .file-block[hidden]{display:none}
+  .anno[hidden]{display:none}
 
   /* ---- diff file blocks ---- */
-  .file-block{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 16px;background:#fff}
-  .file-head{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-bg);
-             border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;user-select:none}
-  .file-head .fname{font-family:ui-monospace,monospace;font-weight:600;word-break:break-all}
-  .file-head .toggle{color:var(--muted);font-size:12px}
-  .file-head .counts{margin-left:auto;display:flex;gap:8px;align-items:center;font-family:ui-monospace,monospace;font-size:12px}
-  .file-head .adds{color:var(--green-text)} .file-head .dels{color:var(--red-text)}
-  .file-head .status-chip{border:1px solid var(--border);background:#fff;color:var(--muted);
-                          border-radius:999px;padding:1px 8px;font-size:11px;text-transform:capitalize}
+  .file-block{border:1px solid var(--border);border-radius:12px;overflow:hidden;
+              margin:0 0 18px;background:var(--card)}
+  .file-head{display:flex;align-items:baseline;gap:12px;padding:14px 18px;background:var(--rail);
+             border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+  .file-head .fname{font-family:var(--font-mono);font-size:var(--fs-small);
+                    font-weight:var(--wt-semi);color:var(--ink);word-break:break-all}
+  .file-head .toggle{color:var(--faint);font-size:var(--fs-micro);line-height:1}
+  .file-head .counts{margin-left:auto;display:flex;gap:10px;align-items:baseline;
+                     font-family:var(--font-mono);font-size:var(--fs-micro)}
+  .file-head .adds{color:var(--add-ink)} .file-head .dels{color:var(--del-ink)}
+  .file-head .status-chip{background:var(--sunken);color:var(--muted);border-radius:999px;
+                          padding:2px 9px;font-family:var(--font-sans);font-size:var(--fs-label);
+                          text-transform:capitalize}
+  /* A text-only control, for actions that read as links rather than buttons. */
+  .link-btn{font:inherit;font-family:var(--font-sans);font-size:var(--fs-meta);
+            font-weight:var(--wt-medium);color:var(--teal);background:none;border:0;
+            padding:0;cursor:pointer}
+  .link-btn:hover{text-decoration:underline}
   .file-body{display:block}
+  .file-block.collapsed .file-head{border-bottom:0}
   .file-block.collapsed .file-body{display:none}
-  .file-actions{padding:8px 14px;border-bottom:1px solid var(--border);background:#fff}
-  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);
-       border-radius:7px;padding:5px 11px;background:var(--panel-bg);color:var(--ink)}
-  .btn:hover{background:var(--gray-bg)}
-  .btn.primary{border-color:var(--green-border);background:var(--green-bg);color:var(--green-text)}
-  .btn.danger{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
-  .btn.small{padding:3px 9px;font-size:11.5px}
-  .no-diff{padding:14px;color:var(--muted);font-size:13px;font-style:italic}
+  .btn{font:inherit;font-family:var(--font-sans);font-size:var(--fs-small);
+       font-weight:var(--wt-medium);cursor:pointer;border:1px solid var(--border);
+       border-radius:8px;padding:7px 13px;background:var(--card);color:var(--ink)}
+  .btn:hover{background:var(--sunken)}
+  .btn.primary{border-color:var(--teal);background:var(--teal);color:var(--white)}
+  .btn.primary:hover{filter:brightness(1.08);background:var(--teal)}
+  .btn.danger{border-color:var(--border);background:var(--card);color:var(--del-ink)}
+  .btn.small{padding:5px 11px;font-size:var(--fs-micro)}
+  .no-diff{padding:16px 18px;color:var(--faint);font-size:var(--fs-meta)}
 
-  /* ---- diff lines ---- */
-  .hunk-header{font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);
-               background:#f1f8ff;padding:4px 14px;border-top:1px solid var(--border)}
-  .diff-line{display:flex;font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.5;cursor:pointer}
-  .diff-line:hover{background:#fff8c5aa}
-  .diff-line.selected{background:var(--amber-bg)}
-  .diff-line.add{background:var(--green-bg)} .diff-line.add.selected{background:#c3f0cd}
-  .diff-line.del{background:var(--red-bg)} .diff-line.del.selected{background:#ffd7d5}
-  .diff-line.context{background:#fff}
-  .gutter{flex:0 0 auto;width:44px;text-align:right;padding:0 6px;color:var(--gray-text);
-          user-select:none;border-right:1px solid var(--border)}
-  .marker{flex:0 0 auto;width:18px;text-align:center;color:var(--muted);user-select:none}
-  .ltext{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;padding-right:10px}
+  /* ---- diff lines ----
+     Rows tint edge to edge and the gutter carries no rule, so a changed line
+     reads as one band rather than three cells. Everything in the row - number,
+     marker, code - takes the row's ink, which is what makes add/del legible
+     without relying on the background tint alone. */
+  .hunk-header{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--faint);
+               background:var(--rail);padding:8px 18px;border-top:1px solid var(--border);
+               border-bottom:1px solid var(--border)}
+  .diff-line{display:flex;font-family:var(--font-mono);font-size:var(--fs-small);
+             line-height:1.62;cursor:pointer;color:var(--ink-soft)}
+  .diff-line:hover{background:var(--row-hover)}
+  .diff-line.selected{background:var(--mint-pill)}
+  .diff-line.add{background:var(--add-bg);color:var(--add-ink)}
+  .diff-line.add.selected{background:var(--add-sel)}
+  .diff-line.del{background:var(--del-bg);color:var(--del-ink)}
+  .diff-line.del.selected{background:var(--del-sel)}
+  .diff-line.context{background:var(--card)}
+  .gutter{flex:0 0 auto;width:52px;text-align:right;padding:0 14px 0 8px;
+          color:inherit;opacity:.55;user-select:none}
+  .diff-line.context .gutter{color:var(--faint);opacity:1}
+  .marker{flex:0 0 auto;width:14px;text-align:left;color:inherit;user-select:none}
+  .diff-line.context .marker{color:var(--faint)}
+  .ltext{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;padding-right:14px}
 
   /* ---- annotations (inline) ---- */
-  .anno-list{padding:0 14px}
-  .anno{border:1px solid var(--border);border-radius:8px;margin:8px 0;padding:10px 12px;background:#fff;font-size:13px}
-  .anno .anno-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:12px;color:var(--muted)}
-  .anno .anno-body{white-space:pre-wrap;word-break:break-word}
-  .anno .anno-code{font-family:ui-monospace,monospace;font-size:12px;background:var(--panel-bg);
-                   border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px;
+  .anno-list{padding:0 18px}
+  /* scroll-margin keeps a keyboard-focused finding clear of the sticky top bar,
+     which .focus() would otherwise scroll it underneath. */
+  .anno{border:1px solid var(--border);border-radius:10px;margin:14px 0;padding:16px 18px;
+        background:var(--card);font-size:var(--fs-body);
+        scroll-margin-top:calc(var(--topbar-h) + 16px)}
+  .anno .anno-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;
+                   font-size:var(--fs-meta);color:var(--muted)}
+  .anno .anno-body{white-space:pre-wrap;word-break:break-word;line-height:var(--lh-body)}
+  .anno .anno-code{font-family:var(--font-mono);font-size:var(--fs-small);background:var(--sunken);
+                   border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:12px;
                    white-space:pre-wrap;word-break:break-word}
-  .anno .anno-actions{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+  .anno .anno-actions{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  /* Position of this draft in the triage queue, so "how much is left" is
+     answerable without scrolling back to the progress bar. */
+  .anno .anno-index{font-family:var(--font-mono);font-size:var(--fs-label);color:var(--faint)}
+  /* Shortcut hints appear only while the card has focus, because that is exactly
+     when the keys do anything - see the keydown handler in buildAnnoNode, which
+     is bound per card rather than globally. Printing them on every card at once
+     would advertise keys that fire on a different finding than the one read. */
+  .anno .anno-kbd{display:none;gap:6px;align-items:center;font-family:var(--font-mono);
+                  font-size:var(--fs-label);color:var(--faint)}
+  .anno.ai:focus-within .anno-kbd{display:flex}
+  .anno .anno-kbd kbd{font:inherit;border:1px solid var(--border);border-radius:4px;
+                      background:var(--card);padding:1px 5px;color:var(--muted)}
+  .anno.ai:focus{outline:2px solid var(--teal);outline-offset:2px}
+  .anno.ai:focus:not(:focus-visible){outline:none}
+
+  /* Accepted AI draft, collapsed. The decision is made, so the card stops
+     competing for attention and becomes a one-line receipt: what it was, where
+     it lands, and the way back out. The fill is --paper, so the row reads as
+     recessed back into the page; --veil measured only dE 1.5 against the white
+     card it sits on, which is not a visible surface change. */
+  .anno.ai.accepted.collapsed{display:flex;align-items:baseline;gap:12px;padding:11px 16px;
+                              background:var(--paper);border-style:solid;border-color:var(--border)}
+  .anno-accepted-pill{flex:0 0 auto;background:var(--mint-pill);color:var(--teal-deep);
+                      border-radius:999px;padding:2px 10px;font-size:var(--fs-label);
+                      font-weight:var(--wt-medium)}
+  .anno-accepted-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+                       white-space:nowrap;color:var(--ink-soft);font-size:var(--fs-meta)}
+  .anno-accepted-where{flex:0 0 auto;font-family:var(--font-mono);font-size:var(--fs-label);
+                       color:var(--faint)}
+  @media (max-width:700px){
+    .anno.ai.accepted.collapsed{flex-wrap:wrap}
+    .anno-accepted-title{white-space:normal;flex-basis:100%;order:3}
+  }
   /* Background is supporting material, not the finding: it stays quieter than
      .anno-body (smaller, muted, panel-tinted) so the eye lands on the body first. */
   .anno .anno-background{margin-top:8px;border:1px solid var(--border);border-radius:6px;
-                         background:var(--panel-bg);color:var(--muted)}
+                         background:var(--sunken);color:var(--muted)}
   .anno .anno-background > summary{padding:5px 10px;cursor:pointer;user-select:none;
                                    font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
   .anno .anno-background > summary:hover{color:var(--ink)}
@@ -98,24 +298,27 @@
      GitHub" vocabulary, quieter than .anno-body so the finding still reads first.
      It informs triage; it never means the finding was suppressed. */
   .anno .anno-overlap{margin-top:8px;padding:6px 10px;border-radius:6px;
-                      border:1px solid #8250df;background:#f3f0ff;color:#4c2889;
+                      border:1px solid var(--sage-line);background:var(--sage);color:var(--sage-ink);
                       font-size:12px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
   .anno .anno-overlap-badge{font-size:10.5px;font-weight:700;text-transform:uppercase;
                             letter-spacing:.05em;white-space:nowrap}
   .anno .anno-overlap-text{flex:1 1 220px}
   .anno .anno-overlap .gh-link{margin:0}
-  .anno.ai{border-style:dashed;border-color:var(--accent);background:#f6faff}
+  .anno.ai{border-style:dashed;border-color:var(--teal);background:var(--mint)}
   .anno.ai.discarded{display:none}
-  .anno.ai.accepted{border-style:solid;border-color:var(--green-border);background:var(--green-bg)}
-  .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;
-         font-weight:600;font-family:ui-monospace,monospace;border:1px solid}
-  .badge-ai{background:#ddf4ff;border-color:var(--accent);color:var(--accent)}
-  .badge-user{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
-  .chip{border-radius:6px;padding:1px 8px;font-size:11px;font-weight:600;border:1px solid}
-  .chip.important{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
-  .chip.nit{background:var(--amber-bg);border-color:var(--amber-border);color:#7a5c00}
-  .chip.pre_existing{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
-  .chip.type{background:var(--panel-bg);border-color:var(--border);color:var(--muted)}
+  .anno.ai.accepted{border-style:solid;border-color:var(--add-ink);background:var(--add-bg)}
+  .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:var(--fs-label);
+         font-weight:var(--wt-medium);font-family:var(--font-mono);border:1px solid}
+  .badge-ai{background:var(--mint-pill);border-color:var(--teal);color:var(--teal)}
+  .badge-user{background:var(--sunken);border-color:var(--border);color:var(--faint)}
+  /* Severity chips carry a tinted fill and matching ink, no outline: at 11px an
+     outline plus a fill reads as a button, and these are labels. */
+  .chip{border-radius:999px;padding:2px 10px;font-size:var(--fs-label);
+        font-weight:var(--wt-medium);border:1px solid transparent}
+  .chip.blocking{background:var(--blocking-bg);color:var(--blocking-ink)}
+  .chip.should_fix{background:var(--warn-bg);color:var(--warn-ink)}
+  .chip.pre_existing{background:var(--sunken);color:var(--muted)}
+  .chip.type{background:var(--sunken);color:var(--muted);font-family:var(--font-mono)}
 
   /* ---- existing GitHub activity (read-only) ----
      A third vocabulary, distinct from .anno (blue/green "this becomes a review
@@ -125,20 +328,25 @@
      renderAnnotations() removes every .anno node when it rebuilds, which would
      silently delete these cards. */
   .gh-thread-list{padding:0 14px}
-  .gh-thread{border:1px solid var(--border);border-left:3px solid #8250df;
-             border-radius:0 8px 8px 0;margin:8px 0;background:#fbfaff;font-size:13px}
+  /* Warm neutral fill, NOT --sage: sage sits within 4/255 of --mint on every
+     channel, so using it here made "already on GitHub" and "will become a review
+     comment" the same colour at a glance. The sage rail keeps the family identity;
+     the fill is what separates it from an actionable draft. */
+  .gh-thread{border:1px solid var(--border);border-left:3px solid var(--sage-line);
+             border-radius:0 8px 8px 0;margin:8px 0;background:var(--sunken);
+             font-size:var(--fs-meta)}
   .gh-thread > summary{padding:7px 12px;cursor:pointer;user-select:none;display:flex;
                        gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-  .gh-thread > summary:hover{background:#f3f0ff}
-  .gh-thread.resolved{background:var(--panel-bg);border-left-color:var(--gray-text);opacity:.85}
+  .gh-thread > summary:hover{background:var(--sage)}
+  .gh-thread.resolved{background:var(--rail);border-left-color:var(--faint);opacity:.85}
   .gh-thread.outdated{border-left-style:dashed}
   .gh-thread-body{padding:2px 12px 10px}
-  .badge-gh{background:#f3f0ff;border-color:#8250df;color:#6639ba}
-  .chip.gh-resolved{background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)}
-  .chip.gh-open{background:var(--amber-bg);border-color:var(--amber-border);color:#7a5c00}
-  .chip.gh-outdated{background:var(--gray-bg);border-color:var(--border);color:var(--gray-text)}
-  .chip.gh-state{background:#f3f0ff;border-color:#8250df;color:#6639ba}
-  .gh-where{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+  .badge-gh{background:var(--sage);border-color:var(--sage-line);color:var(--sage-ink)}
+  .chip.gh-resolved{background:var(--add-bg);border-color:var(--add-ink);color:var(--add-ink)}
+  .chip.gh-open{background:var(--warn-bg);border-color:var(--warn);color:var(--warn-ink)}
+  .chip.gh-outdated{background:var(--sunken);border-color:var(--border);color:var(--faint)}
+  .chip.gh-state{background:var(--sage);border-color:var(--sage-line);color:var(--sage-ink)}
+  .gh-where{font-family:var(--font-mono);font-size:11.5px}
   .gh-count{margin-left:auto;font-size:11.5px}
   .gh-msg{border-top:1px solid var(--border);padding:8px 0 2px;margin:0}
   .gh-msg:first-child{border-top:0}
@@ -147,7 +355,7 @@
   .gh-body{white-space:pre-wrap;word-break:break-word;margin-top:3px}
   .gh-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px}
   .gh-link{font-size:11.5px}
-  .gh-link a{color:var(--accent);text-decoration:none}
+  .gh-link a{color:var(--teal);text-decoration:none}
   .gh-link a:hover{text-decoration:underline}
   .gh-panel .panel-head .gh-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
   .gh-section{margin:0 0 14px}
@@ -155,22 +363,22 @@
   .gh-section h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;
                  letter-spacing:.05em;color:var(--muted)}
   .gh-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0}
-  .gh-warn{border:1px solid var(--amber-border);background:var(--amber-bg);color:#7a5c00;
+  .gh-warn{border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn-ink);
            border-radius:6px;padding:6px 10px;margin:0 0 10px;font-size:12px}
-  .gh-unavailable{border:1px solid var(--red-border);background:var(--red-bg);color:var(--red-text);
+  .gh-unavailable{border:1px solid var(--del-ink);background:var(--del-bg);color:var(--del-ink);
                   border-radius:6px;padding:6px 10px;margin:0 0 10px;font-size:12px}
   .gh-review{border:1px solid var(--border);border-radius:8px;padding:8px 12px;
-             margin:6px 0;background:#fff;font-size:13px}
+             margin:6px 0;background:var(--card);font-size:13px}
 
   /* ---- composer ---- */
-  .composer{border:1px solid var(--accent);border-radius:8px;margin:8px 0;padding:12px;background:#f6faff}
+  .composer{border:1px solid var(--teal);border-radius:8px;margin:8px 0;padding:12px;background:var(--mint)}
   .composer .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12.5px}
   .composer label{font-weight:600;color:var(--muted)}
   .composer select,.composer textarea{font:inherit;font-size:13px;border:1px solid var(--border);
-                                       border-radius:7px;padding:6px 9px;background:#fff;color:var(--ink)}
+                                       border-radius:7px;padding:6px 9px;background:var(--card);color:var(--ink)}
   .composer textarea{width:100%;min-height:60px;resize:vertical}
-  .composer textarea.code{font-family:ui-monospace,monospace;font-size:12.5px}
-  .composer .anchor-note{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace}
+  .composer textarea.code{font-family:var(--font-mono);font-size:12.5px}
+  .composer .anchor-note{font-size:12px;color:var(--muted);font-family:var(--font-mono)}
   .composer .actions{display:flex;gap:8px;margin-top:6px}
 
   /* ---- live Q&A (ask the agent) ----
@@ -179,15 +387,21 @@
      every Q&A surface is grey/dashed and carries its own label. Same tokens,
      different voice. */
   .qa-panel .panel-head .qa-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
-  .qa-status-block{margin:0 0 18px}
-  .qa-status-line{font-size:12.5px;color:var(--muted);margin:0 0 8px}
-  .qa-empty{font-size:13px;color:var(--muted);font-style:italic;margin:0 0 8px}
+  /* The design's top card. It sits in #shell-notices, above the title, because an
+     outstanding question is the one thing that should be read before the diff. */
+  .qa-status-block{margin:0 0 18px;background:var(--mint);border:1px solid var(--teal);
+                   border-radius:10px;padding:14px 16px}
+  .qa-status-line{font-size:var(--fs-meta);color:var(--teal-deep);margin:0;
+                  font-weight:var(--wt-medium)}
+  .qa-status-line ~ .qa-status-line{margin-top:6px;font-weight:var(--wt-body);
+                                    color:var(--muted)}
+  .qa-empty{font-size:var(--fs-meta);color:var(--muted);font-style:italic;margin:0 0 8px}
   /* Host for inline line-range threads: sits between two .diff-line rows, so it
      borrows .anno-list's gutter to line up with annotation cards on the same row. */
   .qa-thread-list{padding:0 14px}
-  .qa-thread{border-left:3px dashed var(--gray-text);background:var(--panel-bg);
+  .qa-thread{border-left:3px dashed var(--faint);background:var(--sunken);
              border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0}
-  .qa-thread .qa-target{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  .qa-thread .qa-target{font-family:var(--font-mono);
                         font-size:11.5px;color:var(--muted);margin-bottom:6px}
   /* Inline threads have no panel subtitle above them to say "this never ships",
      so each one carries the same promise in one quiet line. It repeats down the
@@ -206,107 +420,219 @@
      dashed rail and 12px of padding, and shifting the question too would fight it.
      No tinted blocks and no avatars: this page stays documentary. */
   .qa-q{padding-left:9px;border-left:2px solid var(--border)}
-  .qa-a{margin-left:16px;padding-left:9px;border-left:2px solid var(--accent)}
-  .qa-q > .qa-label{color:var(--gray-text)}
-  .qa-a > .qa-label{font-weight:700;color:var(--accent)}
+  .qa-a{margin-left:16px;padding-left:9px;border-left:2px solid var(--teal)}
+  .qa-q > .qa-label{color:var(--faint)}
+  .qa-a > .qa-label{font-weight:700;color:var(--teal)}
   .qa-pending{font-size:12px;color:var(--muted);font-style:italic;margin:6px 0}
-  .qa-notice{border:1px solid var(--amber-border);background:var(--amber-bg);color:#7a5c00;
+  .qa-notice{border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn-ink);
              border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px}
-  .qa-error{border:1px solid var(--red-border);background:var(--red-bg);color:var(--red-text);
+  .qa-error{border:1px solid var(--del-ink);background:var(--del-bg);color:var(--del-ink);
             border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px;
             display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .qa-composer{border:1px dashed var(--gray-text);border-radius:8px;margin:8px 0;
-               padding:10px 12px;background:var(--panel-bg)}
+  .qa-composer{border:1px dashed var(--faint);border-radius:8px;margin:8px 0;
+               padding:10px 12px;background:var(--sunken)}
   .qa-composer .qa-composer-label{margin-bottom:6px;font-size:11px;font-weight:600;
                                   text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
   .qa-composer textarea{font:inherit;font-size:13px;width:100%;min-height:56px;resize:vertical;
                         border:1px solid var(--border);border-radius:7px;padding:6px 9px;
-                        background:#fff;color:var(--ink)}
+                        background:var(--card);color:var(--ink)}
   .qa-composer .qa-count{margin-top:2px;text-align:right;font-size:11px;color:var(--muted)}
   .qa-composer .actions{display:flex;gap:8px;margin-top:6px}
-  .qa-mic-btn.recording{border-color:var(--red-border);background:var(--red-bg);color:var(--red-text)}
+  .qa-mic-btn.recording{border-color:var(--del-ink);background:var(--del-bg);color:var(--del-ink)}
   /* Read-aloud is started from an answer that can sit thousands of pixels down the
      diff, so the control that ends it cannot live in the page flow: fixed, it is
-     wherever the reviewer already is. Bottom offset is the 96px the body already
-     reserves for the sticky footer plus a gap (and 180px + a gap once the footer
-     wraps - see the media query at the end of this sheet), and z-index is one step
-     above the footer's so the two overlays cannot bury each other. Rounded like the
-     .badge/.status-chip vocabulary: this is an overlay, not a button in a row. */
-  .qa-stop-speaking-btn{position:fixed;right:20px;bottom:108px;z-index:21;
-                        border-radius:999px;border-color:var(--muted)}
+     wherever the reviewer already is. The offset used to be 108px, clearing the
+     96px the body reserved for a position:fixed footer. That footer is now a card
+     in normal flow and the reservation is gone, so the pill sits one gap off the
+     viewport floor. z-index stays below .topbar's 30 so a pinned bar wins.
+     Rounded like the .badge vocabulary: an overlay, not a button in a row. */
+  .qa-stop-speaking-btn{position:fixed;right:20px;bottom:24px;z-index:21;
+                        border-radius:999px;border-color:var(--muted);
+                        background:var(--card);box-shadow:0 2px 10px rgba(22,24,26,.14)}
   .btn:disabled{opacity:.5;cursor:default}
-  .btn:disabled:hover{background:var(--panel-bg)}
+  .btn:disabled:hover{background:var(--sunken)}
 
   /* ---- overflow ---- */
-  .overflow{border:1px dashed var(--border);border-radius:10px;padding:14px 16px;margin:0 0 16px;background:var(--panel-bg)}
+  .overflow{border:1px dashed var(--border);border-radius:10px;padding:14px 16px;margin:0 0 16px;background:var(--sunken)}
   .overflow h3{margin-top:0}
   .overflow ul{margin:0;padding-left:18px} .overflow li{font-size:13px;margin:4px 0}
-  .overflow a{color:var(--accent);text-decoration:none} .overflow a:hover{text-decoration:underline}
-  .overflow .of-counts{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--muted);margin-left:6px}
+  .overflow a{color:var(--teal);text-decoration:none} .overflow a:hover{text-decoration:underline}
+  .overflow .of-counts{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-left:6px}
 
-  /* ---- sticky footer ---- */
-  .footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);
-          padding:12px 20px;z-index:20;box-shadow:0 -2px 8px rgba(27,31,36,.06)}
-  .footer .inner{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .footer .counts-line{font-size:13px;color:var(--muted)}
-  .footer .counts-line b{color:var(--ink)}
-  .footer .general{flex:1 1 260px;min-width:220px}
-  .footer .general textarea{width:100%;min-height:40px;resize:vertical;font:inherit;font-size:13px;
-                            border:1px solid var(--border);border-radius:7px;padding:6px 9px}
-  .footer .footer-btns{display:flex;gap:8px;margin-left:auto}
-  .footer button{font:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:8px;padding:9px 16px}
-  #submit-btn{border:1px solid var(--green-border);background:var(--green-bg);color:var(--green-text)}
-  #download-btn,#copy-fixlist-btn{border:1px solid var(--border);background:var(--panel-bg);color:var(--ink)}
-  #submit-btn:disabled{opacity:.6;cursor:default}
-  /* 180px, not 140px: three footer buttons wrap onto their own row on narrow
-     screens, and the taller footer would otherwise clip the end of the diff.
-     The fixed stop-speaking pill rides on the same allowance: it is parked one gap
-     above whatever height the footer is reserved here, so it never lands on the
-     general-comment box. */
-  @media (max-width:600px){body{padding:16px 12px 180px}.footer .footer-btns{margin-left:0;width:100%}
-                           .qa-stop-speaking-btn{bottom:192px}}
+  /* ---- shell: sticky top bar ---- */
+  .topbar{position:sticky;top:0;z-index:30;background:var(--paper);
+          border-bottom:1px solid var(--border)}
+  .topbar-inner{max-width:calc(var(--sidebar) + var(--gutter) + var(--measure));
+                margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px}
+  .status-dot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--teal)}
+  /* The dot carries state, so it cannot be the only channel: renderShell() also
+     writes a title attribute with the same information in words. */
+  .status-dot.is-local{background:var(--warn)}
+  .status-dot.is-static{background:transparent;box-shadow:inset 0 0 0 2px var(--faint)}
+  .topbar-repo{font-size:var(--fs-meta);color:var(--ink);font-weight:var(--wt-medium)}
+  .topbar-mode{font-size:var(--fs-meta);color:var(--faint)}
+  .progress{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .progress-text{font-size:var(--fs-meta);color:var(--muted);white-space:nowrap}
+  .progress-track{display:block;width:112px;height:5px;border-radius:999px;background:var(--track)}
+  .progress-fill{display:block;height:100%;width:0;border-radius:999px;background:var(--teal);
+                 transition:width .18s ease}
+  .progress[hidden]{display:none}
+  /* The submit button carries the right-push itself, because .progress starts
+     hidden and a bare `.progress ~ .btn-solid` would still match it - sibling
+     combinators ignore [hidden]. Only a VISIBLE progress block hands the push
+     over to itself. */
+  .topbar .btn-solid{margin-left:auto}
+  .progress:not([hidden]) ~ .btn-solid{margin-left:0}
+  .btn-solid{font:inherit;font-family:var(--font-sans);font-size:var(--fs-meta);
+             font-weight:var(--wt-semi);cursor:pointer;border:0;border-radius:9px;
+             padding:9px 18px;background:var(--teal);color:var(--white)}
+  .btn-solid:hover{filter:brightness(1.08)}
+  .btn-solid:disabled{opacity:.5;cursor:default;filter:none}
+
+  /* ---- shell: two-column layout ---- */
+  .layout{max-width:calc(var(--sidebar) + var(--gutter) + var(--measure));
+          margin:0 auto;padding:34px 20px 72px;
+          display:grid;grid-template-columns:var(--sidebar) minmax(0,var(--measure));
+          gap:0 var(--gutter);align-items:start}
+  .sidebar{position:sticky;top:calc(var(--topbar-h) + 22px);align-self:start;
+           font-size:var(--fs-meta)}
+  .main{min-width:0}
+  .toc{display:flex;flex-direction:column;gap:1px}
+  .toc-group{margin:0 0 6px;padding:0 10px;color:var(--faint);font-size:var(--fs-micro)}
+  .toc-group.spaced{margin-top:18px}
+  .toc a{display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:7px;
+         color:var(--muted);text-decoration:none}
+  .toc a:hover{background:var(--sunken)}
+  .toc a.is-active{background:var(--mint-pill);color:var(--ink)}
+  .toc a.is-empty{color:var(--faint)}
+  .toc .toc-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .toc .toc-label.mono{font-size:var(--fs-micro)}
+  .toc .toc-count{margin-left:auto;font-family:var(--font-mono);font-size:var(--fs-micro);
+                  color:var(--faint)}
+  .toc .toc-count.has-blocking{color:var(--danger)}
+  .toc .toc-count.has-drafts{color:var(--warn)}
+  .sidebar-note{margin:18px 10px 0;padding-top:16px;border-top:1px solid var(--border);
+                color:var(--faint);font-size:var(--fs-micro);line-height:1.5}
+
+  /* ---- shell: dark closing card ----
+     Sits in normal flow at the end of .main, NOT position:fixed and NOT inside
+     .wrap. Outside .wrap because renderQaPanel() appends to .wrap, so anything
+     placed inside it would end up above late-arriving Q&A panels. */
+  .closing{background:var(--ink);color:var(--on-dark);border-radius:14px;
+           padding:26px 28px;margin:40px 0 0}
+  .closing-head{font-family:var(--font-display);font-weight:var(--wt-display);
+                font-synthesis:none;font-size:var(--fs-footer);line-height:1.2;
+                color:var(--on-dark);margin:0 0 8px}
+  .closing-head b{font-weight:var(--wt-display)}
+  .closing-note{color:var(--on-dark-muted);font-size:var(--fs-micro);line-height:1.55;margin:0}
+  .closing-general{margin:20px 0 0}
+  .closing-general textarea{width:100%;min-height:44px;resize:vertical;font:inherit;
+                            font-family:var(--font-sans);font-size:var(--fs-meta);
+                            border:1px solid var(--on-dark-line);border-radius:9px;
+                            padding:9px 11px;background:var(--on-dark-fill);color:var(--on-dark)}
+  .closing-general textarea::placeholder{color:var(--on-dark-muted)}
+  .closing-btns{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 0}
+  .closing-btns button{font:inherit;font-family:var(--font-sans);font-size:var(--fs-meta);
+                       font-weight:var(--wt-semi);cursor:pointer;border-radius:9px;padding:10px 18px}
+  #download-btn,#copy-fixlist-btn{border:1px solid var(--on-dark-line);
+                                  background:transparent;color:var(--on-dark)}
+  #download-btn:hover,#copy-fixlist-btn:hover{background:var(--on-dark-fill-hi)}
+  #submit-btn{border:1px solid var(--on-dark);background:var(--on-dark);color:var(--ink)}
+  #submit-btn:hover{background:var(--white)}
+  #submit-btn:disabled{opacity:.45;cursor:default}
+
+  /* The stop-speaking pill was parked above the old fixed footer (bottom:108px
+     = 96px reservation + gap). That footer is gone, so it now sits one gap off
+     the viewport floor and body no longer reserves space for it. */
+  @media (max-width:1080px){
+    .layout{grid-template-columns:minmax(0,1fr);gap:0}
+    .sidebar{position:static;margin:0 0 26px;max-width:var(--measure)}
+    .sidebar-note{margin-left:0}
+    .toc{flex-direction:row;flex-wrap:wrap;gap:4px}
+    .toc-group{width:100%}
+  }
+  @media (max-width:600px){
+    .layout{padding:22px 12px 56px}
+    .topbar-inner{padding:10px 12px;gap:10px;flex-wrap:wrap}
+    .progress{width:100%;margin-left:0;order:3}
+    .topbar .btn-solid,.progress ~ .btn-solid{margin-left:auto}
+    .closing{padding:20px 18px;border-radius:12px}
+    .closing-btns button{flex:1 1 auto}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div class="subtitle">Pull request · reviewer mode</div>
-  <h1 id="page-title">PR review</h1>
-
-  <div id="mode-banner" class="mode-banner"></div>
-
-  <section class="panel" id="narrative-panel">
-    <div class="panel-head" data-toggle="narrative-panel">
-      <span>Narrative: why this change exists</span>
-      <span class="toggle">▾ collapse</span>
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="status-dot" id="status-dot"></span>
+    <span class="topbar-repo mono" id="topbar-repo"></span>
+    <span class="topbar-mode" id="topbar-mode">reviewer mode</span>
+    <div class="progress" id="progress" hidden>
+      <span class="progress-text" id="progress-text"></span>
+      <span class="progress-track"><span class="progress-fill" id="progress-fill"></span></span>
     </div>
-    <div class="panel-body">
-      <div id="narrative">__NARRATIVE_HTML__</div>
-    </div>
-  </section>
-
-  <div id="activity"></div>
-
-  <h2>Diff</h2>
-  <div id="files"></div>
-  <div id="overflow"></div>
-
-</div>
-
-<div class="footer">
-  <div class="inner">
-    <div class="counts-line" id="counts-line">
-      <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <span id="c-overlap-wrap" hidden><b id="c-overlap">0</b> already discussed · </span><b id="c-warn">0</b> warnings
-    </div>
-    <div class="general">
-      <textarea id="general-comment" placeholder="General review comment (optional)…"></textarea>
-    </div>
-    <div class="footer-btns">
-      <button id="download-btn" type="button">⬇ Download annotations</button>
-      <button id="copy-fixlist-btn" type="button">📋 Copy fix-list</button>
-      <button id="submit-btn" type="button">Submit review</button>
-    </div>
+    <button class="btn-solid" id="submit-btn-top" type="button">Submit review</button>
   </div>
+</header>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <nav class="toc" id="toc" aria-label="On this page"></nav>
+    <p class="sidebar-note" id="sidebar-note"></p>
+  </aside>
+
+  <div class="main">
+    <div class="wrap">
+
+      <div class="subtitle" id="page-meta">Pull request · reviewer mode</div>
+      <h1 id="page-title">PR review</h1>
+
+      <div id="shell-notices"></div>
+
+      <section class="panel" id="narrative-panel">
+        <div class="panel-head" data-toggle="narrative-panel">
+          <span class="panel-title">Narrative</span>
+          <span class="panel-sub">why this change exists</span>
+          <span class="toggle">Collapse</span>
+        </div>
+        <div class="panel-body">
+          <div id="narrative">__NARRATIVE_HTML__</div>
+        </div>
+      </section>
+
+      <div id="activity"></div>
+
+      <div class="diff-bar">
+        <h2 id="diff-heading">Diff</h2>
+        <div class="filters" id="filters">
+          <button class="pill" id="f-drafts" aria-pressed="false">Only files with drafts</button>
+          <button class="pill" id="f-decided" aria-pressed="false">Hide decided</button>
+          <button class="pill" id="f-collapse">Collapse all</button>
+        </div>
+      </div>
+      <div id="files"></div>
+      <div id="overflow"></div>
+
+    </div>
+
+    <section class="closing">
+      <p class="closing-head" id="counts-line">
+        <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <span id="c-overlap-wrap" hidden><b id="c-overlap">0</b> already discussed · </span><b id="c-warn">0</b> warnings
+      </p>
+      <p class="closing-note mono" id="closing-note"></p>
+      <div class="closing-general">
+        <textarea id="general-comment" placeholder="General review comment (optional)…"></textarea>
+      </div>
+      <div class="closing-btns">
+        <button id="download-btn" type="button">Download decisions</button>
+        <button id="copy-fixlist-btn" type="button">Copy fix-list</button>
+        <button id="submit-btn" type="button">Submit review</button>
+      </div>
+    </section>
+  </div>
+
 </div>
 
 <!--
@@ -338,7 +664,7 @@
 
   The §2 example renders two files (src/utils/formatDate.js and
   src/utils/formatDate.test.js), one overflow file, and one AI draft (a-2) that
-  appears inline with an "AI draft" badge, a dashed border, an "important"
+  appears inline with an "AI draft" badge, a dashed border, a "blocking"
   severity chip, and Accept / Edit / Discard buttons. It starts EXCLUDED
   (accepted:false) so the footer reads "0 of 1 AI drafts accepted" until you
   click Accept.
@@ -524,19 +850,121 @@
   }
   function fileKey(name) { return "file:" + name; }
 
-  function renderBanner() {
-    var b = document.getElementById("mode-banner");
+  var isPr = DATA.mode === "pr";
+
+  // The full-width mode banner is gone. Its three jobs are now split across the
+  // shell: the top-bar dot carries the mode, the sidebar note carries "nothing
+  // is posted until you submit", and the closing card repeats it at the point of
+  // action. #shell-notices took over the banner's position as the host for
+  // session-level notices, which is where the Q&A status block lands.
+  function renderShell() {
+    var label = isPr
+      ? ((DATA.repo || "") + (DATA.prNumber != null ? " #" + DATA.prNumber : "")).trim()
+      : (DATA.branch || "");
+    document.getElementById("topbar-repo").textContent = label || "pull request";
+    document.getElementById("page-meta").textContent =
+      (isPr ? "Pull request" : "Local branch") + " \u00b7 reviewer mode";
+
+    // DATA.title is optional and absent from the current diff-JSON contract.
+    // Honoured when present so adding it later needs no template change; the
+    // repo/#N fallback is what ships today.
     var title = document.getElementById("page-title");
-    if (DATA.mode === "pr") {
-      b.className = "mode-banner";
-      b.innerHTML = "<b>PR mode</b>Submitting creates a PENDING review on GitHub. You finalize the verdict there.";
-      var label = (DATA.repo || "") + (DATA.prNumber != null ? " #" + DATA.prNumber : "");
-      title.textContent = "Review " + (label.trim() || "pull request");
+    if (typeof DATA.title === "string" && DATA.title.trim()) {
+      title.textContent = DATA.title.trim();
     } else {
-      b.className = "mode-banner local";
-      b.innerHTML = "<b>Local mode</b>Annotations return to the agent as a fix-list. Nothing is posted.";
-      title.textContent = "Review branch " + (DATA.branch || "");
+      title.textContent = isPr
+        ? "Review " + (label || "pull request")
+        : "Review branch " + (DATA.branch || "");
     }
+
+    // Precedence is deliberate: no server is the most limiting state, so it wins
+    // over local, which in turn wins over live. Colour is never the only channel.
+    var dot = document.getElementById("status-dot");
+    var note = document.getElementById("closing-note");
+    var side = document.getElementById("sidebar-note");
+    if (!isLive) {
+      dot.className = "status-dot is-static";
+      dot.title = "No server. Ask is unavailable and Submit downloads decisions instead of posting.";
+      note.textContent = "no server \u00b7 Download decisions hands the file back to the agent";
+      side.textContent = "No server is attached, so nothing can be posted. Your decisions come back as a downloaded file.";
+    } else if (!isPr) {
+      dot.className = "status-dot is-local";
+      dot.title = "Local branch. Nothing will be posted anywhere.";
+      note.textContent = "local branch \u00b7 annotations return to the agent as a fix-list";
+      side.textContent = "Nothing is posted anywhere. Annotations return to the agent as a fix-list.";
+    } else {
+      dot.className = "status-dot";
+      dot.title = "Live. Submitting creates one pending review on GitHub, which you finalise there.";
+      note.textContent = "submitting creates one pending review on GitHub \u00b7 you finalise the verdict there";
+      side.textContent = "Nothing is posted to GitHub until you submit. One pending review, drafts only.";
+    }
+
+    syncTopbarHeight();
+    renderToc();
+  }
+
+  function syncTopbarHeight() {
+    var bar = document.querySelector(".topbar");
+    if (!bar) return;
+    document.documentElement.style.setProperty("--topbar-h", bar.offsetHeight + "px");
+  }
+
+  // The bar's height is measured, so every event that can change it has to
+  // re-measure. Font loading is the non-obvious one: the embedded faces resolve
+  // asynchronously even though they carry no network cost, and when they swap in,
+  // the bar's text re-wraps and its height changes underneath an earlier reading.
+  // Missing this left --topbar-h wrong by a whole wrapped row at some widths.
+  function watchTopbarHeight() {
+    window.addEventListener("resize", syncTopbarHeight);
+    if (document.fonts && typeof document.fonts.ready === "object" &&
+        typeof document.fonts.ready.then === "function") {
+      document.fonts.ready.then(syncTopbarHeight);
+    }
+    // Belt and braces for the same race: ResizeObserver watches the element
+    // itself, so it catches height changes from causes not enumerated here.
+    if (typeof ResizeObserver === "function") {
+      var bar = document.querySelector(".topbar");
+      if (bar) new ResizeObserver(syncTopbarHeight).observe(bar);
+    }
+  }
+
+  // Skeleton only: the per-file draft counts and the active-section highlight are
+  // driven from review state, so they are wired where that state is updated.
+  function renderToc() {
+    var toc = document.getElementById("toc");
+    toc.innerHTML = "";
+
+    toc.appendChild(el("p", "toc-group", "On this page"));
+    toc.appendChild(tocLink("narrative-panel", "Narrative", false));
+    if (activity) toc.appendChild(tocLink("activity", "Previous activity", false));
+
+    var heading = "Diff \u00b7 " + files.length + (files.length === 1 ? " file" : " files");
+    toc.appendChild(el("p", "toc-group spaced", heading));
+    files.forEach(function (f) {
+      toc.appendChild(tocLink(null, shortName(f.filename), true, f.filename));
+    });
+  }
+
+  function shortName(path) {
+    var parts = String(path || "").split("/");
+    return parts[parts.length - 1] || path;
+  }
+
+  function tocLink(targetId, text, isMono, filePath) {
+    var a = el("a", null);
+    a.href = "#";
+    if (filePath != null) a.dataset.tocFile = filePath;
+    if (targetId != null) a.dataset.tocTarget = targetId;
+    var label = el("span", "toc-label" + (isMono ? " mono" : ""), text);
+    a.appendChild(label);
+    a.appendChild(el("span", "toc-count", ""));
+    a.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      var target = filePath ? findFileBlock(filePath)
+                            : document.getElementById(targetId);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return a;
   }
 
   var filesRoot = document.getElementById("files");
@@ -555,25 +983,38 @@
     block.dataset.file = f.filename;
 
     var head = el("div", "file-head");
-    head.appendChild(el("span", "toggle", "▾"));
+    head.appendChild(el("span", "toggle", "\u25be"));
     head.appendChild(el("span", "fname", f.filename));
     var counts = el("span", "counts");
-    counts.appendChild(el("span", "status-chip", f.status || "modified"));
+    // "modified" is the default and the +/- figures already say so. Only a status
+    // worth reading (added, removed, renamed) earns a chip.
+    var status = f.status || "modified";
+    if (status !== "modified") counts.appendChild(el("span", "status-chip", status));
     counts.appendChild(el("span", "adds", "+" + (f.additions || 0)));
     counts.appendChild(el("span", "dels", "-" + (f.deletions || 0)));
     head.appendChild(counts);
-    head.addEventListener("click", function (ev) {
-      block.classList.toggle("collapsed");
-      head.querySelector(".toggle").textContent = block.classList.contains("collapsed") ? "▸" : "▾";
-    });
-    block.appendChild(head);
 
     var body = el("div", "file-body");
-    var actions = el("div", "file-actions");
-    var fileBtn = el("button", "btn small", "+ File-level comment");
-    fileBtn.addEventListener("click", function () { openComposer(body, null, f.filename, null); });
-    actions.appendChild(fileBtn);
-    body.appendChild(actions);
+
+    // File-level comment lives in the header, as a link beside the counts.
+    // stopPropagation is required: the header itself toggles collapse.
+    var fileBtn = el("button", "link-btn", "File comment");
+    fileBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (block.classList.contains("collapsed")) setCollapsed(false);
+      openComposer(body, null, f.filename, null);
+    });
+    head.appendChild(fileBtn);
+
+    function setCollapsed(on) {
+      block.classList.toggle("collapsed", on);
+      head.querySelector(".toggle").textContent = on ? "\u25b8" : "\u25be";
+      syncFilterPills();
+    }
+    head.addEventListener("click", function () {
+      setCollapsed(!block.classList.contains("collapsed"));
+    });
+    block.appendChild(head);
 
     if (f.truncated || !Array.isArray(f.hunks) || !f.hunks.length) {
       body.appendChild(el("div", "no-diff", "No diff to render (binary, too large, or rename-only)."));
@@ -601,11 +1042,14 @@
       row.dataset.side = side;
       row.dataset.line = num == null ? "" : String(num);
 
-      var gOld = el("span", "gutter", ln.oldLine == null ? "" : String(ln.oldLine));
-      var gNew = el("span", "gutter", ln.newLine == null ? "" : String(ln.newLine));
+      // One gutter, not two. It shows `num` - the same number `data-line` carries,
+      // so the digits a reviewer reads are the digits the posted comment anchors
+      // to. A second column showing the opposite side's numbering would be the
+      // one number a comment can never refer to.
+      var gutter = el("span", "gutter", num == null ? "" : String(num));
       var marker = el("span", "marker", ln.kind === "add" ? "+" : ln.kind === "del" ? "-" : " ");
       var text = el("span", "ltext", ln.text != null ? ln.text : "");
-      row.appendChild(gOld); row.appendChild(gNew); row.appendChild(marker); row.appendChild(text);
+      row.appendChild(gutter); row.appendChild(marker); row.appendChild(text);
 
       row.addEventListener("mousedown", function (ev) { beginSelect(f, row, ev); });
       row.addEventListener("mouseenter", function (ev) { extendSelect(f, row, ev); });
@@ -902,7 +1346,56 @@
     return block.querySelector('.anno-list[data-file-anchor="' + cssEscape(a.filePath) + '"]');
   }
 
+  // The enum is the wire format; these are the words a reviewer reads. Keep the
+  // two apart so the payload never depends on presentation.
+  var SEVERITY_LABEL = { blocking: "Blocking", should_fix: "Should fix", pre_existing: "Pre-existing" };
+  function severityLabel(sev) {
+    return SEVERITY_LABEL[sev] || sev;
+  }
+
+  // Where an accepted finding will land, in the words the reviewer needs to trust
+  // it: the anchor, then the promise that it is still only a draft.
+  function annoWhere(a) {
+    if (a.scope === "file") return "file-level \u00b7 will post as a review comment";
+    if (a.lineStart == null) return "will post as a review comment";
+    var r = a.lineStart === a.lineEnd ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
+    return "line " + r + " \u00b7 will post as a review comment";
+  }
+
+  function buildCollapsedAnnoNode(a, onUndo, onExpand) {
+    var n = el("div", "anno ai accepted collapsed");
+    n.dataset.annoId = a.id;
+    n.appendChild(el("span", "anno-accepted-pill", "Accepted"));
+    var title = el("span", "anno-accepted-title", (a.body || "").split("\n")[0]);
+    title.title = a.body || "";
+    n.appendChild(title);
+    n.appendChild(el("span", "anno-accepted-where", annoWhere(a)));
+    var undo = el("button", "link-btn", "Undo");
+    undo.addEventListener("click", function (ev) { ev.stopPropagation(); onUndo(); });
+    n.appendChild(undo);
+    // Clicking the receipt reopens the card without undoing the decision - the
+    // reviewer may want to re-read or edit what they accepted.
+    n.addEventListener("click", onExpand);
+    return n;
+  }
+
   function buildAnnoNode(a) {
+    // An accepted draft shows as a one-line receipt until the reviewer asks for it
+    // back. `_expanded` is deliberately transient: stripInternal() keeps it out of
+    // the payload and saveDraft() persists only accepted/_discarded/body, so a
+    // reload returns to the tidy collapsed view.
+    if (a.origin === "ai" && a.accepted && !a._expanded) {
+      return buildCollapsedAnnoNode(a,
+        function () {
+          a.accepted = false; a._expanded = false;
+          saveDraft(); renderAnnotations(); renderCounts();
+        },
+        function () {
+          a._expanded = true;
+          renderAnnotations();
+        });
+    }
+
     var cls = "anno " + (a.origin === "ai" ? "ai" : "user");
     if (a.origin === "ai" && a.accepted) cls += " accepted";
     var n = el("div", cls);
@@ -911,7 +1404,7 @@
     var meta = el("div", "anno-meta");
     if (a.origin === "ai") {
       meta.appendChild(badge("badge badge-ai", "AI draft"));
-      if (a.severity) meta.appendChild(chip("chip " + a.severity, a.severity));
+      if (a.severity) meta.appendChild(chip("chip " + a.severity, severityLabel(a.severity)));
     } else {
       meta.appendChild(badge("badge badge-user", "you"));
     }
@@ -951,9 +1444,13 @@
 
     var actions = el("div", "anno-actions");
     if (a.origin === "ai") {
-      var acceptBtn = el("button", "btn small primary", a.accepted ? "✓ Accepted" : "Accept");
+      var acceptBtn = el("button", "btn small primary", a.accepted ? "\u2713 Accepted" : "Accept");
       acceptBtn.addEventListener("click", function () {
         a.accepted = !a.accepted;
+        // Accepting is a finished decision, so the card gives up its space. Undoing
+        // re-opens it, otherwise it would collapse into a receipt for a draft that
+        // is no longer accepted.
+        a._expanded = false;
         saveDraft(); renderAnnotations(); renderCounts();
       });
       var editBtn = el("button", "btn small", "Edit");
@@ -1010,8 +1507,163 @@
       });
       actions.appendChild(uEdit); actions.appendChild(uDel);
     }
+
+    if (a.origin === "ai") {
+      var queue = aiAnnotations.filter(function (x) { return !x._discarded; });
+      var pos = queue.indexOf(a);
+      if (pos !== -1) {
+        actions.appendChild(el("span", "anno-index", (pos + 1) + " of " + queue.length));
+      }
+
+      var hints = el("div", "anno-kbd");
+      [["a", "accept"], ["e", "edit"], ["x", "discard"]].forEach(function (pair) {
+        var k = el("kbd", null, pair[0]);
+        hints.appendChild(k);
+        hints.appendChild(el("span", null, pair[1]));
+      });
+      actions.appendChild(hints);
+
+      // Shortcuts are bound to the card, not the document, so a key only ever
+      // acts on the finding that has focus. The typing guard still matters: the
+      // Edit composer and the Ask box render *inside* this node, so an unguarded
+      // handler would discard a finding while the reviewer typed the word "box".
+      n.tabIndex = 0;
+      n.addEventListener("keydown", function (ev) {
+        if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        var t = ev.target;
+        var tag = t && t.tagName ? t.tagName.toLowerCase() : "";
+        if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable)) return;
+        var btn = ev.key === "a" ? acceptBtn : ev.key === "e" ? editBtn : ev.key === "x" ? discardBtn : null;
+        if (!btn) return;
+        ev.preventDefault();
+        var id = a.id;
+        btn.click();
+        // Keyboard triage is a run of decisions, and btn.click() rebuilt every
+        // card, so focus has to be handed to the next undecided finding or the
+        // run stops after one. Mouse users are left alone - stealing focus would
+        // scroll the page out from under them.
+        if (ev.key !== "e") focusDraftAfter(id);
+      });
+    }
+
     n.appendChild(actions);
     return n;
+  }
+
+  // Filters are presentation only: they hide nodes, they never touch annotation
+  // state, so what gets submitted is identical whatever is toggled here.
+  var filters = { onlyDrafts: false, hideDecided: false };
+
+  function applyFilters() {
+    var t = triage();
+    Array.prototype.forEach.call(document.querySelectorAll(".file-block"), function (block) {
+      var slot = t.byFile[block.dataset.file];
+      var hasDrafts = !!(slot && slot.total);
+      block.hidden = filters.onlyDrafts && !hasDrafts;
+    });
+    // "Decided" hides the accepted receipts and nothing else. Discarded drafts are
+    // already absent from the DOM, so they need no hiding.
+    Array.prototype.forEach.call(document.querySelectorAll(".anno.ai.accepted"), function (n) {
+      n.hidden = filters.hideDecided;
+    });
+    syncFilterPills();
+  }
+
+  function syncFilterPills() {
+    var d = document.getElementById("f-drafts");
+    var k = document.getElementById("f-decided");
+    var c = document.getElementById("f-collapse");
+    if (!d) return;
+    d.setAttribute("aria-pressed", String(filters.onlyDrafts));
+    k.setAttribute("aria-pressed", String(filters.hideDecided));
+    // Label reflects what the button will do next, read from the live DOM rather
+    // than a remembered flag, which would go stale the moment a file header is
+    // clicked directly.
+    c.textContent = anyFileExpanded() ? "Collapse all" : "Expand all";
+  }
+
+  function anyFileExpanded() {
+    return !!document.querySelector(".file-block:not(.collapsed)");
+  }
+
+  function initFilters() {
+    document.getElementById("f-drafts").addEventListener("click", function () {
+      filters.onlyDrafts = !filters.onlyDrafts;
+      applyFilters();
+    });
+    document.getElementById("f-decided").addEventListener("click", function () {
+      filters.hideDecided = !filters.hideDecided;
+      applyFilters();
+    });
+    document.getElementById("f-collapse").addEventListener("click", function () {
+      var collapse = anyFileExpanded();
+      Array.prototype.forEach.call(document.querySelectorAll(".file-block"), function (b) {
+        b.classList.toggle("collapsed", collapse);
+        var tg = b.querySelector(".file-head .toggle");
+        if (tg) tg.textContent = collapse ? "\u25b8" : "\u25be";
+      });
+      syncFilterPills();
+    });
+  }
+
+  // Highlights the file the reader is actually looking at.
+  //
+  // Deliberately a scroll listener rather than an IntersectionObserver: an
+  // observer fails *silently* here (no error, just no highlight ever), and it
+  // cannot be exercised in a headless render, so the feature would ship unproven.
+  // Reading geometry on scroll is verifiable and behaves identically everywhere.
+  // The trigger line sits below the sticky bar, so a file counts as current only
+  // once it clears the chrome.
+  function activeFileAt(line) {
+    var blocks = document.querySelectorAll(".file-block");
+    var straddling = null, lastAbove = null;
+    Array.prototype.forEach.call(blocks, function (b) {
+      if (b.hidden) return;
+      var r = b.getBoundingClientRect();
+      if (r.top <= line && r.bottom > line) straddling = b.dataset.file;
+      if (r.top <= line) lastAbove = b.dataset.file;
+    });
+    // Between two blocks nothing straddles the line, so the file just above it is
+    // still the one being read.
+    return straddling !== null ? straddling : lastAbove;
+  }
+
+  function initScrollSpy() {
+    var bar = document.querySelector(".topbar");
+
+    // No requestAnimationFrame throttle on purpose. A "skip if already queued"
+    // guard deadlocks the moment rAF does not run - every later scroll is dropped
+    // because the flag never clears - and rAF is exactly as unobservable here as
+    // the observer this replaced. The work is a handful of getBoundingClientRect
+    // calls, bounded by the schema's 50-file cap, and browsers already coalesce
+    // scroll events to at most one per frame.
+    function update() {
+      var current = activeFileAt((bar ? bar.offsetHeight : 64) + 24);
+      Array.prototype.forEach.call(document.querySelectorAll("#toc a[data-toc-file]"), function (a) {
+        a.classList.toggle("is-active", current !== null && a.dataset.tocFile === current);
+      });
+    }
+
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+  }
+
+  function focusDraftAfter(id) {
+    var cards = Array.prototype.slice.call(document.querySelectorAll(".anno.ai"));
+    var open = function (c) { return !c.classList.contains("collapsed"); };
+    var from = 0;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].dataset.annoId === id) { from = i + 1; break; }
+    }
+    for (var j = from; j < cards.length; j++) {
+      if (open(cards[j])) { cards[j].focus(); return; }
+    }
+    // Nothing left below: fall back to the first still-open finding rather than
+    // dropping focus to <body>, which would end the keyboard run silently.
+    for (var k = 0; k < cards.length; k++) {
+      if (open(cards[k])) { cards[k].focus(); return; }
+    }
   }
 
   function annoLineInfo(a) {
@@ -1367,7 +2019,66 @@
     root.appendChild(panel);
   }
 
+  // The one place triage state is counted. The sidebar, the top-bar progress and
+  // the footer all read this single snapshot, so a per-file count can never
+  // disagree with the totals - which is the whole point of computing it once.
+  //
+  // "Decided" means accepted OR discarded. Discarding is a decision, so it has to
+  // count as progress; the footer's separate "N of M accepted" figure deliberately
+  // measures something else and is left alone.
+  function triage() {
+    var t = { total: 0, decided: 0, undecided: 0, blocking: 0, byFile: {} };
+    aiAnnotations.forEach(function (a) {
+      var key = a.filePath == null ? "" : a.filePath;
+      var slot = t.byFile[key] || (t.byFile[key] = { total: 0, decided: 0, undecided: 0, blocking: 0 });
+      var isDecided = a.accepted === true || a._discarded === true;
+      t.total++; slot.total++;
+      if (isDecided) { t.decided++; slot.decided++; }
+      else {
+        t.undecided++; slot.undecided++;
+        if (a.severity === "blocking") { t.blocking++; slot.blocking++; }
+      }
+    });
+    return t;
+  }
+
+  function renderProgress(t) {
+    var wrap = document.getElementById("progress");
+    if (!t.total) { wrap.hidden = true; }
+    else {
+      wrap.hidden = false;
+      document.getElementById("progress-text").textContent =
+        t.decided + " of " + t.total + (t.total === 1 ? " draft decided" : " drafts decided");
+      document.getElementById("progress-fill").style.width =
+        Math.round((t.decided / t.total) * 100) + "%";
+    }
+    // Re-measure: showing or hiding this block changes the bar's height whenever
+    // the bar wraps, which it does on narrow viewports. renderShell() measured it
+    // before this ran, so without this the sticky offset and .anno scroll-margin
+    // stay one wrapped row too short and focused findings land under the bar.
+    syncTopbarHeight();
+  }
+
+  function syncTocCounts(t) {
+    Array.prototype.forEach.call(document.querySelectorAll("#toc a[data-toc-file]"), function (a) {
+      var slot = t.byFile[a.dataset.tocFile];
+      var count = a.querySelector(".toc-count");
+      var left = slot ? slot.undecided : 0;
+      // A file with nothing left to decide says so with a tick rather than a zero,
+      // so "done" and "never had any" do not look the same.
+      count.textContent = left ? String(left) : (slot && slot.total ? "\u2713" : "");
+      count.className = "toc-count" +
+        (left && slot.blocking ? " has-blocking" : left ? " has-drafts" : "");
+      a.classList.toggle("is-empty", !left);
+    });
+  }
+
   function renderCounts() {
+    var t = triage();
+    renderProgress(t);
+    syncTocCounts(t);
+    applyFilters();
+
     var userCount = userAnnotations.length;
     var aiTotal = aiAnnotations.filter(function (a) { return !a._discarded; }).length;
     var aiAccepted = aiAnnotations.filter(function (a) { return a.accepted && !a._discarded; }).length;
@@ -2332,8 +3043,7 @@
     qaStatusHost = el("div", "qa-status-block");
     qaStatusHost.id = "qa-session-status";
     qaStatusHost.style.display = "none";
-    var banner = document.getElementById("mode-banner");
-    banner.parentNode.insertBefore(qaStatusHost, banner.nextSibling);
+    document.getElementById("shell-notices").appendChild(qaStatusHost);
   }
 
   function renderQaStatus() {
@@ -2535,7 +3245,19 @@
   var submitBtn = document.getElementById("submit-btn");
   var downloadBtn = document.getElementById("download-btn");
   var copyFixlistBtn = document.getElementById("copy-fixlist-btn");
-  if (!isLive) submitBtn.style.display = "none"; // no server → download only
+  // The top bar's button is a forwarder, not a second implementation: the design
+  // offers submit in both places, but there must stay exactly one submit path.
+  // Its disabled state is mirrored by observing the real button rather than by
+  // editing the five places that mutate it, so the two can never disagree.
+  var submitBtnTop = document.getElementById("submit-btn-top");
+  submitBtnTop.addEventListener("click", function () { submitBtn.click(); });
+  new MutationObserver(function () {
+    submitBtnTop.disabled = submitBtn.disabled;
+  }).observe(submitBtn, { attributes: true, attributeFilter: ["disabled"] });
+  if (!isLive) {
+    submitBtn.style.display = "none"; // no server → download only
+    submitBtnTop.style.display = "none";
+  }
   // PR mode has no fix-list: accepted comments go to GitHub as a pending review.
   if (DATA.mode !== "local") copyFixlistBtn.style.display = "none";
 
@@ -2614,18 +3336,20 @@
     generalComment = generalTa.value; saveDraft();
   });
 
+  watchTopbarHeight();
+
   Array.prototype.forEach.call(document.querySelectorAll("[data-toggle]"), function (h) {
     h.addEventListener("click", function () {
       var panel = document.getElementById(h.dataset.toggle);
       panel.classList.toggle("collapsed");
       var t = h.querySelector(".toggle");
-      if (t) t.textContent = panel.classList.contains("collapsed") ? "▸ expand" : "▾ collapse";
+      if (t) t.textContent = panel.classList.contains("collapsed") ? "Expand" : "Collapse";
     });
   });
 
   seedFromData();
   loadDraft();
-  renderBanner();
+  renderShell();
   renderFiles();
   renderOverflow();
   // After renderFiles (it anchors into rendered diff rows) and before
@@ -2635,7 +3359,10 @@
   if (qaEnabled) buildQaPanel();   // before renderAnnotations: threads need a host
   renderAnnotations();
   generalTa.value = generalComment;
+  // Before renderCounts: it calls applyFilters(), which reads the pill elements.
+  initFilters();
   renderCounts();
+  initScrollSpy();
   if (qaEnabled) {
     renderQa();
     // Live-Q&A only, deliberately: questions are the one piece of page state with

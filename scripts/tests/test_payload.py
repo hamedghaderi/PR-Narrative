@@ -98,7 +98,7 @@ class AcceptedFilteringTests(unittest.TestCase):
             _ann(id="a-1", origin="user", accepted=True, lineStart=10,
                  lineEnd=10),
             _ann(id="a-2", origin="ai", accepted=False, lineStart=13,
-                 lineEnd=13, severity="important", reasoning="risky"),
+                 lineEnd=13, severity="blocking", reasoning="risky"),
         ]
         result = build_review.build_payload(anns, _files(),
                                             "deadbeef", body="")
@@ -109,7 +109,7 @@ class AcceptedFilteringTests(unittest.TestCase):
     def test_accepted_ai_annotation_is_included(self):
         """AI annotation with accepted:true IS included (user triaged it in)."""
         anns = [_ann(id="a-2", origin="ai", accepted=True, lineStart=13,
-                     lineEnd=13, severity="important", reasoning="risky")]
+                     lineEnd=13, severity="blocking", reasoning="risky")]
         result = build_review.build_payload(anns, _files(),
                                             "deadbeef", body="")
         self.assertEqual(len(result["payload"]["comments"]), 1)
@@ -228,7 +228,7 @@ class DisproofTests(unittest.TestCase):
     def test_ai_disproof_reaches_the_comment_body(self):
         """AI `disproof` → rendered into the posted body under its label."""
         anns = [_ann(id="d-1", origin="ai", accepted=True, lineStart=13,
-                     lineEnd=13, side="RIGHT", severity="important",
+                     lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="breaking change",
                      disproof="Call formatDate('x') and assert it returns ''.")]
         c = build_review.build_payload(anns, _files(), "sha")["payload"]["comments"][0]
@@ -238,12 +238,12 @@ class DisproofTests(unittest.TestCase):
     def test_severity_and_reasoning_stay_local(self):
         """`severity`/`reasoning` never leak into the GitHub body; only disproof does."""
         anns = [_ann(id="d-2", origin="ai", accepted=True, lineStart=13,
-                     lineEnd=13, side="RIGHT", severity="important",
+                     lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="unique-reasoning-sentinel",
                      disproof="run the thing")]
         c = build_review.build_payload(anns, _files(), "sha")["payload"]["comments"][0]
         self.assertNotIn("unique-reasoning-sentinel", c["body"])
-        self.assertNotIn("important", c["body"])
+        self.assertNotIn("blocking", c["body"])
         self.assertIn("run the thing", c["body"])
 
     def test_user_annotation_disproof_is_ignored(self):
@@ -255,10 +255,10 @@ class DisproofTests(unittest.TestCase):
         self.assertNotIn(build_review.DISPROOF_LABEL, c["body"])
 
     def test_absent_or_blank_disproof_adds_nothing(self):
-        """nit-severity AI draft with no disproof → no label, no stray blank lines."""
+        """should_fix-severity AI draft with no disproof → no label, no stray blank lines."""
         for value in (None, "", "   "):
             ann = _ann(id="d-4", origin="ai", accepted=True, lineStart=13,
-                       lineEnd=13, side="RIGHT", severity="nit",
+                       lineEnd=13, side="RIGHT", severity="should_fix",
                        reasoning="minor", body="just this")
             if value is not None:
                 ann["disproof"] = value
@@ -270,7 +270,7 @@ class DisproofTests(unittest.TestCase):
         """disproof sits before ```suggestion so the fence stays terminal."""
         anns = [_ann(id="d-5", origin="ai", accepted=True, type="suggestion",
                      lineStart=13, lineEnd=13, side="RIGHT",
-                     severity="important", reasoning="r",
+                     severity="blocking", reasoning="r",
                      body="explanation", suggestedCode="return '';",
                      disproof="assert the old caller still gets ''")]
         body = build_review.build_payload(
@@ -283,7 +283,7 @@ class DisproofTests(unittest.TestCase):
         """file-level AI annotation also carries its disproof into the body."""
         anns = [_ann(id="d-6", scope="file", type="concern", origin="ai",
                      accepted=True, lineStart=None, lineEnd=None, side=None,
-                     body="no test covers this", severity="important",
+                     body="no test covers this", severity="blocking",
                      reasoning="r", disproof="add a case and watch it fail")]
         c = build_review.build_payload(anns, _files(), "sha")["payload"]["comments"][0]
         self.assertIn("**File-level comment:**", c["body"])
@@ -292,7 +292,7 @@ class DisproofTests(unittest.TestCase):
     def test_disproof_still_respects_the_body_limit(self):
         """oversized body + disproof → still truncated to the 65,535 ceiling."""
         anns = [_ann(id="d-7", origin="ai", accepted=True, lineStart=13,
-                     lineEnd=13, side="RIGHT", severity="important",
+                     lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="r", body="z" * 65536,
                      disproof="a check that will not survive truncation")]
         c = build_review.build_payload(anns, _files(), "sha")["payload"]["comments"][0]
@@ -337,7 +337,7 @@ class BackgroundDetailTests(unittest.TestCase):
     def test_accepted_ai_background_appended_in_details_block(self):
         """AI `background` -> one <details> block after disproof and suggestion fence."""
         anns = [_ann(id="b-1", origin="ai", accepted=True, type="suggestion",
-                     lineStart=13, lineEnd=13, side="RIGHT", severity="important",
+                     lineStart=13, lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="breaking change", body="explanation",
                      suggestedCode="return '';",
                      disproof="Call formatDate('x') and assert ''.",
@@ -362,7 +362,7 @@ class BackgroundDetailTests(unittest.TestCase):
                         background + "\n</details>")
         body = "x" * (build_review.MAX_BODY - block_len)
         anns = [_ann(id="b-2", origin="ai", accepted=True, lineStart=13,
-                     lineEnd=13, side="RIGHT", severity="important",
+                     lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="r", body=body,
                      disproof="a check",
                      background=background)]
@@ -378,7 +378,7 @@ class BackgroundDetailTests(unittest.TestCase):
     def test_unaccepted_ai_background_excluded(self):
         """AI `background` with accepted:false is dropped entirely."""
         anns = [_ann(id="b-3", origin="ai", accepted=False, lineStart=13,
-                     lineEnd=13, side="RIGHT", severity="important",
+                     lineEnd=13, side="RIGHT", severity="blocking",
                      reasoning="r", body="x",
                      background="should not appear")]
         result = build_review.build_payload(anns, _files(), "sha")

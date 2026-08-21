@@ -39,16 +39,16 @@ the `gh api` side of that mapping).
 | `suggestedCode`| `string`                                       | only for `type: "suggestion"` | Raw replacement code, **no** ```` ```suggestion ```` fence around it. The payload builder (`scripts/build_review.py`) wraps it in the fence when it builds the GitHub comment body; the annotation object itself stores unwrapped code. |
 | `origin`       | `"user" \| "ai"`                               | yes                     | Who authored the annotation.                                                                                       |
 | `accepted`     | `boolean`                                      | yes                     | **Default rule (state this explicitly, the rest of the flow depends on it): AI annotations (`origin: "ai"`) default to `accepted: false`. User annotations (`origin: "user"`) default to `accepted: true`.** Only annotations with `accepted: true` at submit time are included in a GitHub pending review; see the payload builder contract in `references/annotation-schema.md#4-fix-list-artifact-local-mode` and the filtering rule in `scripts/build_review.py`. |
-| `severity`     | `"important" \| "nit" \| "pre_existing"`       | optional, AI only       | Never set by user annotations. No other severity values exist; do not invent new ones (e.g. no `"blocker"`, no `"minor"`). |
+| `severity`     | `"blocking" \| "should_fix" \| "pre_existing"` | optional, AI only       | Never set by user annotations. No other severity values exist; do not invent new ones (e.g. no `"important"`, no `"nit"`, no `"blocker"`, no `"minor"`). |
 | `reasoning`    | `string`                                       | optional, AI only       | One sentence explaining why the AI flagged this line. Never set by user annotations. |
-| `disproof`     | `string`                                       | required when `severity === "important"`, AI only | The smallest concrete check that would prove the concern **false**: a test to write, a command to run, or an output to inspect, in that order of preference. Not a restatement of `reasoning` and not further argument for the concern; it is what would make the comment go away. For the `file_split` structural finding (`references/reviewer-ui.md` §2d) the concern is a recommendation rather than a defect, so this field holds the check that would make the recommendation **inapplicable** instead. Omitted for `"nit"` and `"pre_existing"`, and never set by user annotations. Unlike `severity` and `reasoning`, this field **is** carried into the posted GitHub comment body by `scripts/build_review.py`. |
+| `disproof`     | `string`                                       | required when `severity === "blocking"`, AI only | The smallest concrete check that would prove the concern **false**: a test to write, a command to run, or an output to inspect, in that order of preference. Not a restatement of `reasoning` and not further argument for the concern; it is what would make the comment go away. For the `file_split` structural finding (`references/reviewer-ui.md` §2d) the concern is a recommendation rather than a defect, so this field holds the check that would make the recommendation **inapplicable** instead. Omitted for `"should_fix"` and `"pre_existing"`, and never set by user annotations. Unlike `severity` and `reasoning`, this field **is** carried into the posted GitHub comment body by `scripts/build_review.py`. |
 | `background`   | `string`                                       | optional, AI only       | Plain text, no markdown and no HTML, that may be present when the finding depends on knowledge not visible in the diff hunk: domain terms, cross-file relationships, or behavior this diff removes. Maximum ~80 words; written per `references/reviewer-ui.md` §2c. It does not count toward the §2 pre-seed caps, adds no category or severity, and may appear on any severity. It may also be attached after the page loads through the Q&A protocol section. For accepted annotations, `scripts/build_review.py` appends it to the GitHub comment body as a collapsed `<details><summary>Background</summary>...</details>` block, placed last and omitted entirely if adding it would cross the truncation limit. |
 
 ### Worked example: annotation array
 
 Four annotations: one user line comment, one AI suggestion (untriaged, so
 `accepted: false`), one AI concern with severity/reasoning, and one AI concern that
-carries `background`. Note that the `important` suggestion carries `disproof`, the `nit`
+carries `background`. Note that the `blocking` suggestion carries `disproof`, the `should_fix`
 concern does not, and background may appear on any severity.
 
 ```json
@@ -77,7 +77,7 @@ concern does not, and background may appear on any severity.
     "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
     "origin": "ai",
     "accepted": false,
-    "severity": "important",
+    "severity": "blocking",
     "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
     "disproof": "Render a record with an unparseable date through the page path this concern names. If the page still renders, or that input cannot reach formatDate, the concern is wrong."
   },
@@ -92,7 +92,7 @@ concern does not, and background may appear on any severity.
     "body": "The new invalid-date branch in formatDate.js isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
     "origin": "ai",
     "accepted": false,
-    "severity": "nit",
+    "severity": "should_fix",
     "reasoning": "New error path in formatDate.js has no corresponding assertion in this test file."
   },
   {
@@ -106,7 +106,7 @@ concern does not, and background may appear on any severity.
     "body": "The page path that calls formatDate does not guard against the new throw, so a single malformed date can abort rendering.",
     "origin": "ai",
     "accepted": false,
-    "severity": "important",
+    "severity": "blocking",
     "reasoning": "Callers previously relied on silent failure; the new throw propagates through a page path with no try/catch.",
     "disproof": "Render a record with an unparseable date through the page path; catch a thrown exception or confirm the path is wrapped.",
     "background": "The date-formatting page previously rendered records with malformed dates as blank cells. This PR introduces a throw inside formatDate, but the page path shown in the body has no try/catch around the call, so an unparseable date will bubble up and stop rendering."
@@ -275,7 +275,7 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": false,
-      "severity": "important",
+      "severity": "blocking",
       "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
       "disproof": "Render a record with an unparseable date through the page path this concern names. If the page still renders, or that input cannot reach formatDate, the concern is wrong.",
       "background": "The date-formatting page previously rendered records with malformed dates as blank cells. This PR introduces a throw inside formatDate for that case, but the page path shown in the body has no try/catch around the call, so an unparseable date will bubble up and stop rendering."
@@ -612,7 +612,7 @@ The transcript is reconstructed by the page from the same files the server reads
       "suggestedCode": "  if (Number.isNaN(date.getTime())) {\n    return '';\n  }",
       "origin": "ai",
       "accepted": true,
-      "severity": "important",
+      "severity": "blocking",
       "reasoning": "New throw path is a breaking change for callers relying on the old silent-failure behavior.",
       "disproof": "Render a record with an unparseable date through the page path this concern names. If the page still renders, or that input cannot reach formatDate, the concern is wrong."
     },
@@ -627,7 +627,7 @@ The transcript is reconstructed by the page from the same files the server reads
     "body": "The new invalid-date branch in `formatDate.js` isn't covered by any test here, so a future change could break that path and every test would still pass. Worth adding one case for it.",
       "origin": "ai",
       "accepted": false,
-      "severity": "nit",
+      "severity": "should_fix",
       "reasoning": "New error path in formatDate.js has no corresponding assertion in this test file."
     }
   ]
@@ -985,7 +985,7 @@ A quick reference for implementers wiring these contracts together:
 | Anchor side                  | `side`: `"RIGHT"` (new/context) \| `"LEFT"` (deleted)                  |
 | AI vs. user                  | `origin`: `"ai"` \| `"user"`                                          |
 | Triage state                 | `accepted`: boolean; **AI default `false`, user default `true`**      |
-| Falsification step           | `disproof`: string, AI only, required when `severity === "important"`; one of the AI-metadata fields that survives into the posted GitHub comment |
+| Falsification step           | `disproof`: string, AI only, required when `severity === "blocking"`; one of the AI-metadata fields that survives into the posted GitHub comment |
 | Payload discriminator        | `kind: "review-annotations"` (reviewer mode) vs. no `kind` field at all (author mode, `references/review-ui.md`) |
 | Session nonce                | `sessionNonce`: generated per run, embedded in §2 diff JSON, required on `POST /ask` and `POST /submit` |
 | File render cap              | 30 files fully rendered in `files[]`; the rest go to `overflowFiles[]` |

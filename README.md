@@ -33,8 +33,8 @@ the PR itself.
 | | Plain agent prompt | Reviewer mode |
 |---|---|---|
 | Where findings land | Terminal scrollback | A pending review on the PR, anchored to real diff lines |
-| How many you get | Unbounded | Hard cap: 3 per file, 10 per review |
-| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk |
+| How many you get | Unbounded | Hard cap: 3 per file, 10 per review, plus at most 2 file-structure notes |
+| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk. Plus one capped structural note: a file this diff pushed into a second responsibility |
 | How findings are triaged | Manually interpreted and copied from chat or terminal output | Each finding is visibly accepted or rejected before submission |
 | Who signs the review | Ambiguous | You do. The skill never sets Approve, Request changes, or Comment |
 
@@ -42,6 +42,9 @@ The cap is the constraint that matters most. An unconstrained agent has no reaso
 stop at three findings in a file, so it writes eleven, and the two that mattered get
 buried under nine that didn't. Seeding zero findings is an explicitly valid outcome:
 when nothing in the diff clears the bar, the page opens with no AI comments at all.
+
+The structural note is budgeted separately, at two per review, so "this file now does
+two things" can never take a slot away from a real bug.
 
 ## How it works
 

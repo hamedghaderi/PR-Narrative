@@ -171,14 +171,24 @@ git clone https://github.com/hamedghaderi/pr-narrative.git
 
 # OpenCode / .agents-style skills:
 mkdir -p ~/.agents/skills/pr-narrative
-cp -R pr-narrative/SKILL.md pr-narrative/references ~/.agents/skills/pr-narrative/
+cp -R pr-narrative/SKILL.md pr-narrative/references \
+      pr-narrative/assets pr-narrative/scripts ~/.agents/skills/pr-narrative/
 
 # Claude Code / .claude-style skills:
 mkdir -p ~/.claude/skills/pr-narrative
-cp -R pr-narrative/SKILL.md pr-narrative/references ~/.claude/skills/pr-narrative/
+cp -R pr-narrative/SKILL.md pr-narrative/references \
+      pr-narrative/assets pr-narrative/scripts ~/.claude/skills/pr-narrative/
 ```
 
-Only `SKILL.md` and `references/` are needed; `examples/` is just for reference.
+`SKILL.md`, `references/`, `assets/` and `scripts/` are all required;
+`examples/` is just for reference.
+
+`assets/` and `scripts/` are not optional — reviewer mode copies
+`assets/review-template.html`, inlines the embedded fonts from
+`assets/review-fonts.css`, and runs `scripts/review_server.py`,
+`scripts/build_review.py`, `scripts/existing_activity.py` and
+`scripts/diff_anchor.py`. Omitting either directory leaves author mode working
+and reviewer mode failing on a missing file.
 
 </details>
 

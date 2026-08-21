@@ -132,7 +132,9 @@ Exactly one thing differs: the AI pre-seed policy. Instead of the four-category 
 sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a one-sentence
 reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
 arrives pre-accepted, and zero findings is still a correct outcome; only the categories
-narrow to security.
+narrow to security. The `file_split` structural finding in `references/reviewer-ui.md`
+§2d is **not** part of this subcommand: how a file is organized is not a security
+finding, and its separate budget is not extra room for one here.
 
 Every reviewer-mode guardrail holds verbatim: a posted review is **PENDING** only, this
 skill never submits a verdict, and a local-path review posts nothing anywhere.
@@ -582,9 +584,9 @@ understand:
 You may pre-seed a small number of AI draft comments on genuinely risky lines before
 serving the page. The full definition lives in `references/reviewer-ui.md` §2 and is
 **locked**: don't widen it. In summary: only lines actually changed in this diff;
-only four categories (probable bugs/logic errors, security issues, missing error
-handling on new paths, breaking-change risk to callers); hard caps of **≤3 per file,
-≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`,
+only four line-comment categories (probable bugs/logic errors, security issues, missing
+error handling on new paths, breaking-change risk to callers); hard caps of **≤3 per
+file, ≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`,
 and every `severity: "important"` draft also carries `disproof`, the smallest check
 that would prove the concern **false** (if you can't name one, it isn't important:
 demote it or drop it, and never invent a test for something untestable);
@@ -592,6 +594,16 @@ when nothing qualifies, seed zero; an empty set is a correct outcome, not a fail
 Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excluded from
 submission by default**, and only included if the user explicitly accepts it in the
 UI.
+
+One structural finding sits alongside those four categories: `file_split`, for a file
+this diff pushed into carrying a second responsibility. It is defined in
+`references/reviewer-ui.md` §2d and is **also locked**. In summary: `scope: "file"`,
+never `scope: "general"`; at most **2 per review**, counted separately so they never
+consume the ≤3/file or ≤10/review budget above; the diff itself must have made the
+structure worse; size alone is never evidence; and `disproof` is the check that would
+make the recommendation *inapplicable* rather than the concern false. Read
+`references/reviewer-ui.md` §2d before seeding one. It does not apply to
+`review-security`.
 
 Finding the problem is only half of it. **Before you write any AI comment `body`, read and
 follow `references/reviewer-ui.md` §2c.** It is the single source of truth for order,
@@ -630,9 +642,11 @@ resolve, not that the code changed. The reverse also holds, so do not promote so
 else's unverified comment into a finding you cannot support from the diff yourself. If
 you cannot support it, it is not your finding to make.
 
-None of this changes the locked pre-seed policy above. Do not add categories. Comment only
-on changed lines. Do not raise the caps, add values to the `severity` enum, change the
-zero-findings outcome, or leave out the required `disproof` on an `important` finding.
+None of this changes the locked pre-seed policy above. Do not add categories. Line
+comments go only on changed lines, and the one file-scoped exception is `file_split`
+under `references/reviewer-ui.md` §2d, on its own separate budget. Do not raise either
+set of caps, add values to the `severity` enum, change the zero-findings outcome, or
+leave out the required `disproof` on an `important` finding.
 
 ### 4. Build the page, serve it, and wait
 

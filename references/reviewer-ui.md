@@ -194,12 +194,16 @@ author-mode filenames in `references/review-ui.md`.)
 
 Before serving the page, the agent may pre-seed a small number of AI draft comments
 into `aiAnnotations`. This policy is locked: don't widen the categories, don't raise
-the caps, and don't invent a fifth reason to comment.
+the caps, and don't invent a new reason to comment. The four categories below are the
+only reasons to comment on a **line**. One further finding type exists for **file
+structure**, defined in §2d; it carries its own separate budget and is the only
+exception to this list. It relaxes nothing else in this section.
 
 - **Scope**: only comment on lines that were actually **changed in this diff**: added,
   removed, or their immediate context. Never comment on unrelated pre-existing code
   just because it's visible in a hunk.
-- **Categories: exactly these four, nothing else**:
+- **Line-comment categories: exactly these four, nothing else** (the one file-scoped
+  exception is §2d):
   1. Probable bugs or logic errors.
   2. Security issues.
   3. Missing error handling on new code paths.
@@ -208,7 +212,8 @@ the caps, and don't invent a fifth reason to comment.
   `aiAnnotations` array before injection, not just what you'd like to say. If a file
   has more than 3 genuinely risky lines, pick the 3 most severe and drop the rest
   silently; if the review as a whole would exceed 10, trim across files by severity
-  until it's at ≤10 per review.
+  until it's at ≤10 per review. File-structure findings under §2d have their own
+  budget and do **not** consume either cap.
 - **Every AI annotation carries `severity` and one-sentence `reasoning`**: no
   unexplained flags. `severity` is one of `"important" | "nit" | "pre_existing"`
   (`references/annotation-schema.md` §1); never a value outside that set.
@@ -251,8 +256,9 @@ suggestedCode?, background?, origin: "ai", accepted: false, severity, reasoning,
 (`disproof` present exactly when `severity` is `"important"`; `background` is optional
 and governed by §2c below).
 
-A security-only variant of this policy, used by the review-security subcommand, is
-defined in §2b below. The body-writing rules in §2c apply to both.
+File-structure findings, which sit outside these caps, are defined in §2d below. A
+security-only variant of this policy, used by the review-security subcommand, is
+defined in §2b. The body-writing rules in §2c apply to all three.
 
 ## 2b. Security-only pre-seed variant (review-security)
 
@@ -303,10 +309,14 @@ This variant is **locked**, same as §2: do not widen the categories, do not rai
 caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,
 missing error handling, and breaking-change risks belong to §2's list, not this one.
 
-## 2c. Writing the finding body (applies to §2 and §2b)
+**§2d does not apply here.** `review-security` seeds security findings only, and how a
+file is organized is not a security finding. Seed no `file_split` annotations under this
+subcommand, and do not treat §2d's separate budget as extra room for one.
 
-§2 and §2b decide **whether** a line needs a comment. This section explains **how to
-write** every AI comment.
+## 2c. Writing the finding body (applies to §2, §2b and §2d)
+
+§2, §2b and §2d decide **whether** something needs a comment. This section explains
+**how to write** every AI comment.
 
 > **This section is the single source of truth for AI comment wording.** Other documents
 > explain when comments are created and how they are sent. They point here instead of
@@ -710,6 +720,59 @@ records are lost, because the evidence does not show either one. This is a maint
 concern that depends on a future change, so it is a `nit` unless the retry window is really
 expected to change. Keep the claim this small. The result it states is the strongest one
 the evidence supports.
+
+## 2d. File-structure findings (LOCKED: separate budget, one rule)
+
+§2 covers defects on changed lines. This section covers the single **structural**
+finding the pre-seed may make: a file this diff touched now carries more than one
+responsibility and should be split. It is deliberately narrow, because "consider
+extracting this into a helper" is the most common form of low-value AI review noise,
+and the point of §2 is to not produce that.
+
+- **One rule only: `file_split`.** Do not invent other structural findings. Function
+  length, naming, formatting, duplicated logic, and layering violations are **not**
+  covered here and are not reasons to comment. If you think one of them matters, it
+  either qualifies under a §2 category on its own evidence or it is not a finding.
+- **Scope is `"file"`**, never `"line"`. Set `filePath`; leave `lineStart`, `lineEnd`
+  and `side` as `null` (`references/annotation-schema.md` §1). `scripts/build_review.py`
+  anchors the posted comment to the first valid diff line in that file and prefixes the
+  body with `**File-level comment:**`. A file with no valid anchor line is dropped with
+  a warning, so a structural note on a pure-rename or mode-change file will not post.
+- **Never seed `scope: "general"`.** PR-level advice ("split this into smaller PRs")
+  has no triage path yet: `placeAnno()` in `assets/review-template.html` builds the
+  card and then returns without inserting it, while `renderCounts()` still counts it.
+  The reviewer would see a finding in the count and be unable to find, accept, or
+  reject it. A general-scope AI draft is a phantom. Keep PR-level advice out of
+  `aiAnnotations` entirely until that path exists.
+- **Budget: ≤2 per review, counted separately.** These do **not** count toward §2's ≤3
+  per file or ≤10 per review, so a structural note can never displace a probable bug.
+  Two is the ceiling for the entire review, not per file.
+- **The diff must have made it worse.** Seed this only when the changed regions
+  introduce or materially expand a second responsibility. A file that was already long
+  before this PR does not qualify; that is pre-existing structure, and the author of
+  this diff is not the right person to bill for it.
+- **Size alone is never sufficient.** Line count, function count and file length may
+  make you look, but they never justify the finding by themselves. You must be able to
+  name at least two distinct responsibilities, point at the symbols or regions that
+  carry them, and describe a concrete extraction boundary. If you cannot name the
+  boundary, there is no finding.
+- **`disproof` is the void condition.** For a defect, `disproof` is the check that
+  proves the concern false. For a recommendation it is the check that proves the
+  recommendation **inapplicable**: the smallest observable fact about the repository,
+  build or tests that would make you withdraw the advice. For example, "if the two
+  responsibilities share private state that cannot be extracted without exporting it,
+  this advice is void." That is concrete and checkable, so a `file_split` finding may
+  legitimately carry `severity: "important"`. If you cannot name such a check, set
+  `"nit"` or drop the finding, exactly as in §2. Never invent one.
+- **Do not recommend a split that cannot be made safely.** If the pieces would have to
+  ship together anyway, if separating them leaves a non-building intermediate state, or
+  if the churn is out of proportion to the benefit, there is no finding. Say nothing.
+- **Same injection contract as §2**: always `origin: "ai"`, `accepted: false`, plus a
+  `severity` and a one-sentence `reasoning`. Use `type: "concern"`.
+- **Zero is the normal outcome.** Most PRs produce no structural finding at all. An
+  empty result is correct and expected; never manufacture one to use up the budget.
+- **The body follows §2c**, same as every other AI comment: the result a person can see
+  first, in plain English, evidence after it, one clear action at the end.
 
 ## 3. Serve + wait
 

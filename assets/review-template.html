@@ -198,6 +198,17 @@
             letter-spacing:.05em;color:var(--muted)}
   .qa-text{white-space:pre-wrap;word-break:break-word;color:var(--ink)}
   .qa-text.qa-muted{color:var(--muted);font-style:italic}
+  /* Who is speaking, without importing chat bubbles: an 11px "YOU" against an 11px
+     "AGENT" was the only difference between the two roles, which reads as one voice.
+     The answer steps in and carries a solid accent rail; the question stays flush
+     against the thread edge with a hairline one, so the alternation is visible from
+     the shape alone. Indent is margin on the answer only - .qa-thread already owns a
+     dashed rail and 12px of padding, and shifting the question too would fight it.
+     No tinted blocks and no avatars: this page stays documentary. */
+  .qa-q{padding-left:9px;border-left:2px solid var(--border)}
+  .qa-a{margin-left:16px;padding-left:9px;border-left:2px solid var(--accent)}
+  .qa-q > .qa-label{color:var(--gray-text)}
+  .qa-a > .qa-label{font-weight:700;color:var(--accent)}
   .qa-pending{font-size:12px;color:var(--muted);font-style:italic;margin:6px 0}
   .qa-notice{border:1px solid var(--amber-border);background:var(--amber-bg);color:#7a5c00;
              border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px}

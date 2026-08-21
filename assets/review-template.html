@@ -724,7 +724,11 @@
     // this line range becomes a question to the agent. Live-and-nonce only, and
     // only for line ranges, because §5.3's "lines" target needs a line range.
     if (qaEnabled && lineInfo && !editing) {
-      var askLinesBtn = el("button", "btn small qa-ask-lines-btn", "Ask about this");
+      // Sitting in the same actions row as "Add comment", "Ask about this" read as
+      // that textarea's submit button. It names the other destination instead now, so
+      // the row offers a choice of where the text goes rather than two ways to send it.
+      var askLinesBtn = el("button", "btn small qa-ask-lines-btn", "Ask the agent instead");
+      askLinesBtn.title = "Send this to the agent as a question. It never becomes a review comment.";
       askLinesBtn.addEventListener("click", function () {
         var parent = c.parentNode;
         var anchor = c.nextSibling;
@@ -739,7 +743,8 @@
           parentQid: null,
           container: parent,
           insertBefore: anchor,
-          label: "Ask the agent about " + anchorNote.textContent
+          label: "Ask the agent about " + anchorNote.textContent,
+          seedText: ta.value
         });
       });
       actions.appendChild(askLinesBtn);
@@ -1743,6 +1748,17 @@
     });
     c.appendChild(count);
 
+    // Carried over from a composer the reviewer had already typed into, so the text
+    // survives the switch of destination instead of being thrown away with the box it
+    // was typed in. Cap and counter are applied by hand for the same reason
+    // appendTranscript() does it: assigning .value fires no "input" and ignores
+    // maxLength. Note what is NOT carried: `dictated` stays false, because text that
+    // was typed did not come from the microphone.
+    if (typeof opts.seedText === "string" && opts.seedText) {
+      ta.value = opts.seedText.slice(0, MAX_QUESTION_CHARS);
+      count.textContent = ta.value.length + " / " + MAX_QUESTION_CHARS;
+    }
+
     var actions = el("div", "actions");
     var sendBtn = el("button", "btn primary small", "Send question");
     var cancelBtn = el("button", "btn small", "Cancel");
@@ -1843,6 +1859,11 @@
       opts.container.appendChild(c);
     }
     ta.focus();
+    // focus() alone parks the caret in front of seeded text; the next keystroke
+    // belongs after it. Guarded because setSelectionRange throws on a detached node.
+    if (ta.value) {
+      try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+    }
     return c;
   }
 

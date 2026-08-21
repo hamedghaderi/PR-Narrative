@@ -769,6 +769,18 @@ still arrives. All of them funnel through `stopSpeaking()`, which releases the t
 and repaints *before* its `!window.speechSynthesis` early return, so a browser with no
 synthesiser at all still ends up with idle labels.
 
+**The line-range composer offers a choice of destination, not two send buttons.**
+`buildComposer()` renders one textarea whose actions row contains both `Add comment`
+and the Q&A hand-off. Labelling that hand-off `Ask about this` made it read as the
+textarea's own submit, and its handler dropped the composer before opening the Q&A one,
+so text typed first was silently discarded and had to be retyped into a second box. The
+button now names the other destination (`Ask the agent instead`) and passes
+`seedText: ta.value` through to `openQaComposer()`, which prefills, re-syncs the
+`.qa-count` counter by hand and parks the caret at the end — assigning `.value` fires no
+`input` event and ignores `maxLength`, the same reason `appendTranscript()` does it
+manually. Seeded text does **not** set the `dictated` flag: it was typed, not spoken, so
+it must not add the question to `voiceQids` and make the answer auto-speak.
+
 
 **Voice support is narrower than feature detection suggests.** A present constructor
 proves only that the binding exists. Chromium maps every speech-backend failure onto

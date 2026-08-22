@@ -100,22 +100,18 @@ Author mode never opens the PR for you.
 
 ## Example output
 
-Both artifacts below come from one invented scenario: a service that fetched product
+Everything below comes from one invented scenario: a service that fetched product
 thumbnails one at a time and hit a CDN rate limit, and now pulls a whole category as a
 single bundle.
 
-![Author-mode review page for the thumbnail-batching example](examples/screenshots/hero-review-page.png)
+![Reviewer-mode page for the thumbnail-batching change](examples/screenshots/reviewer-page.png)
 
-*The before panel shows one-request-per-image calls hitting a red `429` and stalling the
-rest of the batch; the after panel shows the single `?bundle` request unpacking into
-file chips instead.*
+*Reviewer mode on that change: the narrative sits above the diff, and the two AI drafts
+are anchored to the lines they describe rather than floating in a terminal. Both arrive
+unaccepted, one `Blocking` and one `Should fix`, each offering Accept, Edit, Discard and
+Ask. The footer counts what you kept: nothing reaches GitHub until you submit.*
 
-![Section-level Approve / Request-change controls](examples/screenshots/section-controls.png)
-
-*Two adjacent sections, two independent verdicts: one approved, one with changes
-requested. Each section carries its own state until every one is approved.*
-
-The Markdown body that ships alongside the page makes the same change concrete:
+The Markdown body author mode writes for the same change makes it concrete:
 
 | | Before | After |
 |---|---|---|

@@ -371,6 +371,76 @@ class QAServerTestCase(unittest.TestCase):
         self.assertEqual(os.listdir(os.path.join(self.session_dir, "questions")), [])
 
 
+class BuildMarkerTestCase(unittest.TestCase):
+    """An unsubstituted __FONT_CSS__ loads no @font-face at all, yet
+    getComputedStyle still reports the embedded families and
+    document.fonts.status still reads "loaded". The page renders in fallback
+    fonts and looks merely off, so the launch has to catch it instead.
+    """
+
+    def test_unsubstituted_font_css_is_refused_and_explains_the_effect(self):
+        err = review_server.marker_error("<style>__FONT_CSS__</style>")
+        self.assertIsNotNone(err)
+        self.assertIn("__FONT_CSS__", err)
+        self.assertIn("fallback fonts", err)
+
+    def test_every_marker_is_reported_not_just_the_first(self):
+        page = "<style>__FONT_CSS__</style>__REVIEW_DATA__ __NARRATIVE_HTML__"
+        err = review_server.marker_error(page)
+        for marker in review_server.BUILD_MARKERS:
+            self.assertIn(marker, err)
+
+    def test_fully_substituted_page_is_accepted(self):
+        self.assertIsNone(review_server.marker_error("<style>@font-face{}</style>"))
+
+    def test_markers_are_listed_for_inspection(self):
+        page = "__FONT_CSS__ and __NARRATIVE_HTML__"
+        self.assertEqual(review_server.unsubstituted_markers(page),
+                         ["__FONT_CSS__", "__NARRATIVE_HTML__"])
+
+
+class QANonceConsistencyTestCase(unittest.TestCase):
+    """The page hides its entire Ask UI when it cannot authenticate, and says
+    nothing about it. These lock the launch-time guard that makes that loud.
+    """
+
+    NONCE = "cafebabe4242"
+
+    def _page(self, nonce=None):
+        data = '{"mode": "pr", "repo": "a/b"'
+        if nonce:
+            data += ', "sessionNonce": "%s"' % nonce
+        return '<html><script id="review-data">%s}</script></html>' % data
+
+    def test_nonce_requested_but_page_has_none_is_refused(self):
+        err = review_server.qa_nonce_error(self._page(None), self.NONCE)
+        self.assertIsNotNone(err)
+        self.assertIn("silently absent", err)
+        self.assertIn("(absent)", err)
+
+    def test_nonce_mismatch_is_refused_and_names_both_values(self):
+        err = review_server.qa_nonce_error(self._page("adifferentone"), self.NONCE)
+        self.assertIsNotNone(err)
+        self.assertIn(self.NONCE, err)
+        self.assertIn("adifferentone", err)
+
+    def test_page_nonce_without_server_nonce_is_refused(self):
+        err = review_server.qa_nonce_error(self._page(self.NONCE), None)
+        self.assertIsNotNone(err)
+        self.assertIn("404", err)
+
+    def test_matching_nonce_is_accepted(self):
+        self.assertIsNone(review_server.qa_nonce_error(self._page(self.NONCE), self.NONCE))
+
+    def test_no_nonce_on_either_side_is_accepted(self):
+        """A live server with Q&A deliberately off is a valid configuration."""
+        self.assertIsNone(review_server.qa_nonce_error(self._page(None), None))
+
+    def test_nonce_is_read_from_the_page_not_guessed(self):
+        self.assertEqual(review_server.page_session_nonce(self._page("abc123")), "abc123")
+        self.assertIsNone(review_server.page_session_nonce(self._page(None)))
+
+
 class QADisabledServerTestCase(unittest.TestCase):
     def test_ask_and_answers_return_404_when_session_dir_is_not_configured(self):
         with tempfile.TemporaryDirectory() as tmpdir:

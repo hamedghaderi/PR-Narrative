@@ -167,6 +167,86 @@ def _open_browser(url: str) -> bool:
     return False
 
 
+BUILD_MARKERS = ("__FONT_CSS__", "__REVIEW_DATA__", "__NARRATIVE_HTML__")
+
+MARKER_CONSEQUENCE = {
+    "__FONT_CSS__": "no @font-face would load, so the page renders in system "
+                    "fallback fonts while still naming the embedded families",
+    "__REVIEW_DATA__": "the diff JSON is missing, so there is nothing to review",
+    "__NARRATIVE_HTML__": "the narrative section would show the literal marker",
+}
+
+
+def unsubstituted_markers(page_html):
+    return [m for m in BUILD_MARKERS if m in page_html]
+
+
+def marker_error(page_html, page_path="the page"):
+    """Explain any build marker left unsubstituted, or None.
+
+    __FONT_CSS__ is the one that hides. Left in place it is invalid CSS inside
+    <style id="font-faces">, so the browser drops the whole rule and loads no
+    @font-face at all - while the rest of the sheet still names the families, so
+    getComputedStyle keeps reporting "Instrument Sans" and document.fonts.status
+    still reads "loaded". The page quietly renders in system fallback fonts and
+    looks slightly off rather than broken, which is near-impossible to diagnose
+    from the browser.
+    """
+    left = unsubstituted_markers(page_html)
+    if not left:
+        return None
+    lines = ["the page still contains unsubstituted build markers, so it would "
+             "not render as intended:"]
+    for m in left:
+        lines.append(f"  {m} - {MARKER_CONSEQUENCE[m]}")
+    lines.append(f"  page : {page_path}")
+    lines.append("Substitute all three markers when building the page, "
+                 "__FONT_CSS__ first. See references/reviewer-ui.md section 1.")
+    return "\n".join(lines)
+
+
+PAGE_NONCE_RE = re.compile(r'"sessionNonce"\s*:\s*"([^"]+)"')
+
+
+def page_session_nonce(page_html):
+    m = PAGE_NONCE_RE.search(page_html)
+    return m.group(1) if m else None
+
+
+def qa_nonce_error(page_html, nonce, page_path="the page"):
+    """Explain why this page and this --nonce cannot work together, or None.
+
+    The page gates its whole Q&A surface on `qaEnabled = isLive && sessionNonce
+    !== null` (assets/review-template.html). That expression lives in another
+    file and nothing downstream reports on it, so a mismatch silently costs the
+    reviewer every Ask affordance while the page still describes itself as live.
+    Both facts are known here, so the launch can refuse instead of degrading.
+    """
+    page_nonce = page_session_nonce(page_html)
+    if nonce and page_nonce != nonce:
+        return (
+            "live Q&A was requested with --nonce, but the page does not carry a "
+            "matching sessionNonce, so its Ask UI would be silently absent.\n"
+            f"  --nonce      : {nonce}\n"
+            f"  page's value : {page_nonce if page_nonce else '(absent)'}\n"
+            f"  page         : {page_path}\n"
+            "Export SESSION_NONCE before building the page so the diff JSON gets "
+            'diff_json["sessionNonce"], and pass that same value here. See '
+            "references/reviewer-ui.md section 1."
+        )
+    if page_nonce and not nonce:
+        return (
+            "the page carries a sessionNonce but the server was started without "
+            "--nonce/--session-dir, so its Ask buttons would appear and then fail "
+            "with 404 on every question.\n"
+            f"  page's value : {page_nonce}\n"
+            f"  page         : {page_path}\n"
+            "Pass --session-dir and --nonce with that value, or rebuild the page "
+            "without SESSION_NONCE exported."
+        )
+    return None
+
+
 def build_handler(
     page_html: str,
     out_path: str,
@@ -326,6 +406,11 @@ def main():
 
     with open(args.page, "r", encoding="utf-8") as fh:
         page_html = fh.read()
+
+    for problem in (marker_error(page_html, args.page),
+                    qa_nonce_error(page_html, args.nonce, args.page)):
+        if problem:
+            ap.error(problem)
 
     # Inject the live marker so the page enables server mode. Put it right after
     # <head> if present, else prepend; either way the page can detect it.

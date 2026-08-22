@@ -165,9 +165,15 @@ Two things this feature deliberately does **not** do:
 
 `.callout b` is already styled as the uppercase teal label, so write the words
 "In one sentence" as plain text inside `<b>` and let the sheet do the rest. Everything
-after it is the problem story. Do **not** wrap that story in a `.panel`: the Narrative
-panel already provides the surrounding card, and nesting one inside it draws a second
-box. Write it using the same panel
+after it is the problem story.
+
+Do not put a single `.panel` around that whole story as an outer wrapper: the
+Narrative panel already draws that card, so a second one just boxes the content
+twice. Panels are still the right markup *inside* the story wherever a section
+genuinely needs its own card, a before/after comparison being the obvious case.
+The rule is about the redundant outer wrapper, not about using panels at all.
+
+Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`
 block (`.panel`, `.panel-head`, `.panel-body`, `.callout`, `.callout.tip`), which is
 copied straight from `references/html-visual.md`. You're writing the *inner* HTML that

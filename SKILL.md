@@ -696,6 +696,11 @@ marker and `sessionNonce` are present (`qaEnabled = isLive && sessionNonce !== n
 The exact server flags are `--session-dir`, `--nonce`, and `--max-lifetime`
 (default 14400s); use them verbatim.
 
+If the nonce you pass to `--nonce` is not the one baked into the page, the server
+**refuses to start** and tells you both values. That is a build-order mistake, almost
+always the `export` and the page build landing in two different Bash calls: fix it by
+rebuilding the page in the same call as the `export`, not by dropping the flag.
+
 The Ask UI also takes spoken questions: a push-to-talk mic button dictates into the
 question box (transcript editable before sending), every answer carries a read-aloud
 button, and answers to dictated questions speak automatically. Anything playing can be

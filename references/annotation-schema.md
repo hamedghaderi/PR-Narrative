@@ -141,6 +141,7 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 | `overflowFiles` | `array`                  | Files beyond the 30-file render cap. See below.                                            |
 | `aiAnnotations` | `array` of annotation objects | AI pre-seeded annotations (contract §1), always `origin: "ai"`, `accepted: false` at injection time. |
 | `existingActivity` | `object` \| `null`    | The PR's **already-posted** review activity, read from GitHub. `null` in local mode (no PR to read) and on any page built without the fetch step. Full shape in §2a. **Read-only: it is never submitted.** |
+| `generatedAt`   | `string` (ISO 8601, optional) | When the page was built. Rendered at the top of the page as `21 Aug, 09:41` in the reader's own timezone, because the diff and activity below are a **snapshot** from that moment and do not update while the page is open. Omit it and the page falls back to `existingActivity.fetchedAt`, then shows no timestamp at all. The page never substitutes the current time: doing so would relabel a week-old snapshot as fresh every time it is reopened. |
 | `reviewRunId`   | `string` (optional)      | Random token generated once per page build. Appended to the page's `localStorage` key so a draft belongs to exactly ONE review run. Without it the key is only `repo/prNumber`, so a second review of the same PR rehydrates the first run's draft: annotations anchored to a diff that has since moved, and a saved `aiState` for id `"ai-1"` silently reapplying to whatever `"ai-1"` means this time, which can make a finding load pre-accepted or pre-discarded on its own. Omit it and the old key (and the old behavior) is used. |
 | `sessionNonce`  | `string`                 | Random hex string generated once per server run and embedded by the agent. The page includes it in every `POST /ask` and `POST /submit`; the server rejects requests with a mismatched or missing nonce with `409 Conflict`. This prevents a stale browser tab from a previous run on a reused port from writing into a new session. See §5 for the full Q&A contract. |
 
@@ -202,7 +203,7 @@ cap; in a real diff this array would only be non-empty once the 31st file appear
   "prUrl": "https://github.com/acme/catalog-service/pull/482",
   "branch": "fix/date-parsing-guard",
   "headRefOid": "9f3a1c2b8e4d5f60718293a4b5c6d7e8f9012345",
-  "narrativeHtml": "<section class=\"panel\"><h2>The problem</h2><p>formatDate() silently returned an empty string for malformed input, which masked bad data upstream.</p></section>",
+  "narrativeHtml": "<section class=\"callout\"><b>In one sentence</b><p>formatDate() now throws on an unparseable date instead of quietly returning an empty string, so bad data surfaces at the call site.</p></section><h3>The problem</h3><p>formatDate() silently returned an empty string for malformed input, which masked bad data upstream.</p>",
   "files": [
     {
       "filename": "src/utils/formatDate.js",

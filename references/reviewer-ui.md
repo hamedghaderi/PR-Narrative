@@ -39,6 +39,7 @@ same `diff_anchor.py --files-json` call above.
 
 ```bash
 python3 - <<'PYEOF'
+import datetime
 import json
 import os
 
@@ -61,6 +62,10 @@ diff_json = {
     "existingActivity": None,
     # One token per page build, so a draft cannot leak across review runs.
     "reviewRunId": os.environ.get("REVIEW_RUN_ID") or None,
+    # When this snapshot was taken. Shown at the top of the page so a reviewer
+    # who reopens it later can see how old the diff below is.
+    "generatedAt": datetime.datetime.now(datetime.timezone.utc)
+                   .isoformat(timespec="seconds").replace("+00:00", "Z"),
 }
 
 # Live Q&A only: the agent exports SESSION_NONCE in the parent bash shell before
@@ -80,6 +85,13 @@ PYEOF
 > `os.environ.get("SESSION_NONCE")` above reads it correctly. The same value must be
 > passed to `scripts/review_server.py --nonce` and used in the session directory name.
 > Omit the `export` (and therefore the `sessionNonce` field) when live Q&A is not in use.
+>
+> The `export` and this heredoc must run in the **same** Bash call. Across two calls
+> the env var is gone, `os.environ.get("SESSION_NONCE")` returns `None`, and the field
+> is dropped without complaint — which used to cost the page every Ask affordance while
+> it still described itself as live. `review_server.py` now refuses to start when its
+> `--nonce` and the page's `sessionNonce` disagree, so this fails loudly at launch
+> instead of silently in the browser.
 
 Generate `REVIEW_RUN_ID` in the same Bash call, before the heredoc, exactly like
 `SESSION_NONCE`:
@@ -143,7 +155,19 @@ Two things this feature deliberately does **not** do:
    the page on the fly and stored nowhere: it never reaches `localStorage`, the
    submission payload, or GitHub.
 
-`narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story). Write it using the same panel
+`narrativeHtml` is the human-first explainer (the one-sentence summary and the problem story).
+
+**It must open with the one-sentence summary, in this exact shape:**
+
+```html
+<section class="callout"><b>In one sentence</b><p>The change in 20 seconds, in plain words.</p></section>
+```
+
+`.callout b` is already styled as the uppercase teal label, so write the words
+"In one sentence" as plain text inside `<b>` and let the sheet do the rest. Everything
+after it is the problem story. Do **not** wrap that story in a `.panel`: the Narrative
+panel already provides the surrounding card, and nesting one inside it draws a second
+box. Write it using the same panel
 and callout markup already styled inside `assets/review-template.html`'s `<style>`
 block (`.panel`, `.panel-head`, `.panel-body`, `.callout`, `.callout.tip`), which is
 copied straight from `references/html-visual.md`. You're writing the *inner* HTML that

@@ -32,7 +32,7 @@
     --ink:#16181A;          /* headings; also the dark footer background */
     --ink-soft:#2C2F31;     /* body copy */
     --muted:#4C4842;        /* secondary text, chip labels */
-    --faint:#98918A;        /* hunk headers, meta lines, keyboard hints */
+    --faint:#6F6860;  /* AA on every surface it is used on; #98918A measured 2.7-3.1:1 */
     --on-dark:#F7F4EF;      /* text on the dark footer */
     --on-dark-muted:#9A9A95;
     /* derived: --on-dark at low alpha, for hairlines and fills on the dark card */
@@ -73,19 +73,26 @@
 
        Weight limits are hard constraints of the real fonts, not preferences.
        See assets/fonts/NOTICE.md:
-         - Instrument Serif is STATIC REGULAR ONLY. Never ask for >400; the
-           browser would synthesise a faux-bold, which on a high-contrast serif
-           looks visibly broken. Hence --wt-display and font-synthesis:none.
-         - Instrument Sans spans 400-700 only. There is no 200 or 300.
+         - Instrument Sans spans 400-700 only. There is no 200 or 300, so
+           --wt-display must stay inside that range; font-synthesis:none keeps a
+           faux-bold from appearing if the face ever fails to load.
        ---------------------------------------------------------------------- */
-    --font-display:"Instrument Serif",Iowan Old Style,Palatino,Georgia,serif;
+    /* Titles are sans, GitHub-style, not editorial serif. The fallback list is
+       GitHub's own stack so an un-embedded page still lands somewhere close. */
+    --font-display:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     --font-sans:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 
-    --wt-display:400;       /* the only weight Instrument Serif has */
-    --wt-body:400;
-    --wt-medium:500;
-    --wt-semi:600;
+    --wt-display:700;       /* title weight; Instrument Sans reaches 700 */
+    --wt-body:500;
+    --wt-medium:600;
+    --wt-semi:700;
+    /* Code is read differently from prose: it is scanned for small tokens, and
+       the design's measured 400 renders thin on a light diff tint. Deliberately
+       heavier than the mockup, which measures 400 on diff rows too. One knob for
+       every code surface so they cannot drift apart. */
+    --wt-code:500;
+    --wt-code-changed:600;
 
     --fs-h1:44px;    --lh-h1:1.06;
     --fs-footer:28px;
@@ -113,7 +120,7 @@
        -webkit-font-smoothing:antialiased}
   .wrap{max-width:var(--measure);margin:0 auto}
 
-  /* Display face: one weight, and never synthesised. */
+  /* Display face: a real semibold from the variable sans, never synthesised. */
   h1,h2,h3,.display{font-family:var(--font-display);font-weight:var(--wt-display);
                     font-synthesis:none;font-synthesis-weight:none;color:var(--ink)}
   h1{font-size:var(--fs-h1);line-height:var(--lh-h1);letter-spacing:-.004em;margin:0 0 10px}
@@ -126,6 +133,17 @@
   p{margin:0 0 14px}
   a{color:var(--teal)}
   .subtitle{color:var(--faint);font-size:var(--fs-meta);margin-bottom:4px}
+  /* Scale of the change, then anything still demanding a decision. Counts that
+     are zero are omitted rather than shown as "0", so the line only ever names
+     work that exists. */
+  .pagestats{display:flex;align-items:baseline;flex-wrap:wrap;
+             margin:0 0 24px;font-size:var(--fs-meta);color:var(--faint)}
+  .pagestats .st-mono{font-family:var(--font-mono);font-size:var(--fs-small)}
+  .pagestats .st-blocking{color:var(--danger)}
+  /* Two separator weights, per the design: a plain mono dot inside the size
+     group, and a quieter wider one between groups. */
+  .pagestats .st-sep{margin:0 15px;opacity:.45}
+  .pagestats .st-dot{margin:0 8px}
   /* Ligatures off on every code surface: JetBrains Mono renders -> as an arrow
      and => as a double arrow by default, which in a diff hides what the source
      literally says and breaks any suggestion the reviewer copies. */
@@ -136,9 +154,12 @@
      This list must name every selector that sets font-family:var(--font-mono) -
      grep that string before adding a new one. Deliberately NOT applied globally:
      the body face uses fi/fl ligatures and the design keeps them. */
-  code,.mono,pre,textarea.code,.badge,
+  code,.mono,pre,textarea.code,
   .file-head .fname,.file-head .counts,.hunk-header,.diff-line,
-  .anno .anno-code,.gh-where,.composer .anchor-note,
+  .badge,.chip.type,.toc .toc-count,
+  .anno .anno-anchor,.anno .anno-index,.anno .anno-kbd,
+  .anno .anno-sugg-label,.anno .anno-sugg-code,.anno-accepted-where,
+  .gh-where,.composer .anchor-note,
   .qa-thread .qa-target,.overflow .of-counts{
     font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
 
@@ -171,8 +192,10 @@
   .diff-bar{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:0 0 16px}
   .diff-bar h2{margin:0}
   .filters{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  /* Regular, not Medium: the design's pill text measures IoU 0.896 against
+     Instrument Sans 400 and only 0.735 against 500. */
   .pill{font:inherit;font-family:var(--font-sans);font-size:var(--fs-label);
-        font-weight:var(--wt-medium);cursor:pointer;border:1px solid var(--border);
+        font-weight:var(--wt-body);cursor:pointer;border:1px solid var(--border);
         border-radius:999px;padding:5px 13px;background:var(--card);color:var(--muted)}
   .pill:hover{background:var(--sunken);color:var(--ink)}
   /* aria-pressed is the state, so the styling hangs off it rather than a parallel
@@ -187,8 +210,10 @@
               margin:0 0 18px;background:var(--card)}
   .file-head{display:flex;align-items:baseline;gap:12px;padding:14px 18px;background:var(--rail);
              border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+  /* Medium: the design embeds JetBrainsMonoRoman-Medium, and the file path is
+     its only prominent use. 600 was heavier than anything measured. */
   .file-head .fname{font-family:var(--font-mono);font-size:var(--fs-small);
-                    font-weight:var(--wt-semi);color:var(--ink);word-break:break-all}
+                    font-weight:var(--wt-medium);color:var(--ink);word-break:break-all}
   .file-head .toggle{color:var(--faint);font-size:var(--fs-micro);line-height:1}
   .file-head .counts{margin-left:auto;display:flex;gap:10px;align-items:baseline;
                      font-family:var(--font-mono);font-size:var(--fs-micro)}
@@ -223,7 +248,10 @@
                background:var(--rail);padding:8px 18px;border-top:1px solid var(--border);
                border-bottom:1px solid var(--border)}
   .diff-line{display:flex;font-family:var(--font-mono);font-size:var(--fs-small);
-             line-height:1.62;cursor:pointer;color:var(--ink-soft)}
+             font-weight:var(--wt-code);line-height:1.62;cursor:pointer;color:var(--ink-soft)}
+  /* Added and removed rows carry the extra step: they are the thing being
+     reviewed, so they should read heavier than the context around them. */
+  .diff-line.add,.diff-line.del{font-weight:var(--wt-code-changed)}
   .diff-line:hover{background:var(--row-hover)}
   .diff-line.selected{background:var(--mint-pill)}
   .diff-line.add{background:var(--add-bg);color:var(--add-ink)}
@@ -242,28 +270,71 @@
   .anno-list{padding:0 18px}
   /* scroll-margin keeps a keyboard-focused finding clear of the sticky top bar,
      which .focus() would otherwise scroll it underneath. */
-  .anno{border:1px solid var(--border);border-radius:10px;margin:14px 0;padding:16px 18px;
+  .anno{border:1px solid var(--border);border-radius:12px;margin:14px 0;overflow:hidden;
         background:var(--card);font-size:var(--fs-body);
         scroll-margin-top:calc(var(--topbar-h) + 16px)}
-  .anno .anno-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;
-                   font-size:var(--fs-meta);color:var(--muted)}
+  /* Header band. Everything identifying the finding lives here - severity, that
+     it is a draft, its anchor, and its place in the queue - so the body below can
+     be nothing but the argument. */
+  .anno .anno-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+                   padding:12px 18px;background:var(--rail);
+                   border-bottom:1px solid var(--border);border-radius:11px 11px 0 0}
+  .anno .anno-anchor{font-family:var(--font-mono);font-size:var(--fs-small);color:var(--faint)}
+  .anno .anno-index{margin-left:auto;font-family:var(--font-mono);
+                    font-size:var(--fs-small);color:var(--faint)}
+  .anno .anno-body-wrap{padding:18px}
   .anno .anno-body{white-space:pre-wrap;word-break:break-word;line-height:var(--lh-body)}
-  .anno .anno-code{font-family:var(--font-mono);font-size:var(--fs-small);background:var(--sunken);
-                   border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:12px;
-                   white-space:pre-wrap;word-break:break-word}
-  .anno .anno-actions{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  /* Position of this draft in the triage queue, so "how much is left" is
-     answerable without scrolling back to the progress bar. */
-  .anno .anno-index{font-family:var(--font-mono);font-size:var(--fs-label);color:var(--faint)}
-  /* Shortcut hints appear only while the card has focus, because that is exactly
-     when the keys do anything - see the keydown handler in buildAnnoNode, which
-     is bound per card rather than globally. Printing them on every card at once
-     would advertise keys that fire on a different finding than the one read. */
-  .anno .anno-kbd{display:none;gap:6px;align-items:center;font-family:var(--font-mono);
-                  font-size:var(--fs-label);color:var(--faint)}
-  .anno.ai:focus-within .anno-kbd{display:flex}
-  .anno .anno-kbd kbd{font:inherit;border:1px solid var(--border);border-radius:4px;
-                      background:var(--card);padding:1px 5px;color:var(--muted)}
+  /* Inline code inside a finding's prose, per the mockup's tinted `curves`. */
+  .anno .anno-body code,.anno .anno-detail-text code{font-family:var(--font-mono);
+                    font-size:.92em;background:var(--sunken);border-radius:4px;padding:1px 5px}
+
+  /* Suggested change: its own frame, labelled, with the diff tint carried onto
+     every line so it reads as a patch rather than a quotation. */
+  .anno .anno-sugg{margin-top:14px;border:1px solid var(--border);border-radius:8px;
+                   overflow:hidden}
+  .anno .anno-sugg-head{display:flex;align-items:center;gap:10px;padding:8px 12px;
+                        background:var(--rail);border-bottom:1px solid var(--border)}
+  .anno .anno-sugg-label{font-family:var(--font-mono);font-size:var(--fs-small);
+                         color:var(--faint)}
+  .anno .anno-sugg-head .link-btn{margin-left:auto}
+  .anno .anno-sugg-code{background:var(--add-bg);font-family:var(--font-mono);
+                        font-size:var(--fs-small);font-weight:var(--wt-code-changed);
+                        line-height:1.62;padding:8px 0;color:var(--add-ink)}
+  .anno .anno-sugg-line{display:flex}
+  .anno .anno-sugg-marker{flex:0 0 auto;width:34px;text-align:center;opacity:.7;
+                          user-select:none}
+  .anno .anno-sugg-text{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;
+                        padding-right:14px}
+
+  /* One disclosure for the AI metadata the mockup does not show. Quiet by
+     default: the summary is the only thing competing with the actions row. */
+  .anno .anno-details{margin-top:14px}
+  .anno .anno-details > summary{cursor:pointer;user-select:none;list-style:none;
+                    font-size:var(--fs-meta);color:var(--faint)}
+  .anno .anno-details > summary::-webkit-details-marker{display:none}
+  /* A trailing space inside content: collapses, so the gap is margin. */
+  .anno .anno-details > summary::before{content:"\25b8";font-size:.9em;
+                    display:inline-block;margin-right:7px}
+  .anno .anno-details[open] > summary::before{content:"\25be"}
+  .anno .anno-details > summary:hover{color:var(--muted)}
+  .anno .anno-details-body{margin-top:10px;padding:12px 14px;background:var(--sunken);
+                           border-radius:8px}
+  .anno .anno-detail + .anno-detail{margin-top:9px}
+  .anno .anno-detail-label{display:block;font-size:var(--fs-label);color:var(--faint);
+                           text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+  .anno .anno-detail-text{display:block;font-size:var(--fs-meta);color:var(--muted);
+                          line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .anno .anno-details-body .btn{margin-top:12px}
+
+  .anno .anno-actions{padding:0 18px 18px;display:flex;gap:8px;flex-wrap:wrap;
+                      align-items:center}
+  /* Always visible, matching the mockup. Every key here has a button beside it,
+     so nothing is advertised that cannot be pressed - `?` is only added when Ask
+     is. The keys act on the focused card; see the keydown handler. */
+  .anno .anno-kbd{margin-left:auto;display:flex;gap:5px;align-items:center;
+                  font-family:var(--font-mono);font-size:var(--fs-small);color:var(--faint)}
+  .anno .anno-kbd kbd{font:inherit;background:none;border:0;padding:0}
+  .anno .anno-kbd-sep{opacity:.6}
   .anno.ai:focus{outline:2px solid var(--teal);outline-offset:2px}
   .anno.ai:focus:not(:focus-visible){outline:none}
 
@@ -272,45 +343,38 @@
      it lands, and the way back out. The fill is --paper, so the row reads as
      recessed back into the page; --veil measured only dE 1.5 against the white
      card it sits on, which is not a visible surface change. */
-  .anno.ai.accepted.collapsed{display:flex;align-items:baseline;gap:12px;padding:11px 16px;
-                              background:var(--paper);border-style:solid;border-color:var(--border)}
-  .anno-accepted-pill{flex:0 0 auto;background:var(--mint-pill);color:var(--teal-deep);
-                      border-radius:999px;padding:2px 10px;font-size:var(--fs-label);
-                      font-weight:var(--wt-medium)}
-  .anno-accepted-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
-                       white-space:nowrap;color:var(--ink-soft);font-size:var(--fs-meta)}
-  .anno-accepted-where{flex:0 0 auto;font-family:var(--font-mono);font-size:var(--fs-label);
-                       color:var(--faint)}
-  @media (max-width:700px){
-    .anno.ai.accepted.collapsed{flex-wrap:wrap}
-    .anno-accepted-title{white-space:normal;flex-basis:100%;order:3}
-  }
-  /* Background is supporting material, not the finding: it stays quieter than
-     .anno-body (smaller, muted, panel-tinted) so the eye lands on the body first. */
-  .anno .anno-background{margin-top:8px;border:1px solid var(--border);border-radius:6px;
-                         background:var(--sunken);color:var(--muted)}
-  .anno .anno-background > summary{padding:5px 10px;cursor:pointer;user-select:none;
-                                   font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-  .anno .anno-background > summary:hover{color:var(--ink)}
-  .anno .anno-background-text{padding:0 10px 9px;font-size:12.5px;
-                              white-space:pre-wrap;word-break:break-word}
+  .anno.ai.accepted.collapsed{display:flex;align-items:center;gap:14px;padding:14px 16px;
+                              background:var(--paper);border-color:var(--border)}
+  .anno-accepted-pill{flex:0 0 auto;align-self:flex-start;background:var(--mint-pill);
+                      color:var(--teal-deep);border-radius:999px;padding:3px 11px;
+                      font-size:var(--fs-meta);font-weight:var(--wt-medium)}
+  /* Title over anchor, per the mockup: the sentence identifies the finding and
+     the mono line underneath says where it lands. min-width:0 is what lets the
+     ellipsis work inside a flex row. */
+  .anno-accepted-main{flex:1 1 auto;min-width:0}
+  .anno-accepted-title{display:block;overflow:hidden;text-overflow:ellipsis;
+                       white-space:nowrap;color:var(--muted);font-size:var(--fs-body)}
+  .anno-accepted-where{display:block;margin-top:3px;font-family:var(--font-mono);
+                       font-size:var(--fs-small);color:var(--faint)}
+  .anno.ai.accepted.collapsed .link-btn{flex:0 0 auto;color:var(--muted);
+                                        font-size:var(--fs-body)}
+  .anno.ai.accepted.collapsed .link-btn:hover{color:var(--ink)}
   /* Overlap notice on an AI draft: purple to tie it to the .gh-* "already on
      GitHub" vocabulary, quieter than .anno-body so the finding still reads first.
      It informs triage; it never means the finding was suppressed. */
   .anno .anno-overlap{margin-top:8px;padding:6px 10px;border-radius:6px;
                       border:1px solid var(--sage-line);background:var(--sage);color:var(--sage-ink);
                       font-size:12px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-  .anno .anno-overlap-badge{font-size:10.5px;font-weight:700;text-transform:uppercase;
+  .anno .anno-overlap-badge{font-size:10.5px;font-weight:var(--wt-semi);text-transform:uppercase;
                             letter-spacing:.05em;white-space:nowrap}
   .anno .anno-overlap-text{flex:1 1 220px}
   .anno .anno-overlap .gh-link{margin:0}
-  .anno.ai{border-style:dashed;border-color:var(--teal);background:var(--mint)}
+  /* A solid card, per the mockup. The dashed teal outline and mint fill this
+     replaced were doing the same job as the `Draft` chip while making the card
+     shout louder than the diff it annotates. */
+  .anno.ai{background:var(--card)}
   .anno.ai.discarded{display:none}
-  .anno.ai.accepted{border-style:solid;border-color:var(--add-ink);background:var(--add-bg)}
-  .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:var(--fs-label);
-         font-weight:var(--wt-medium);font-family:var(--font-mono);border:1px solid}
-  .badge-ai{background:var(--mint-pill);border-color:var(--teal);color:var(--teal)}
-  .badge-user{background:var(--sunken);border-color:var(--border);color:var(--faint)}
+  .anno.ai.accepted{border-color:var(--teal)}
   /* Severity chips carry a tinted fill and matching ink, no outline: at 11px an
      outline plus a fill reads as a button, and these are labels. */
   .chip{border-radius:999px;padding:2px 10px;font-size:var(--fs-label);
@@ -319,6 +383,7 @@
   .chip.should_fix{background:var(--warn-bg);color:var(--warn-ink)}
   .chip.pre_existing{background:var(--sunken);color:var(--muted)}
   .chip.type{background:var(--sunken);color:var(--muted);font-family:var(--font-mono)}
+  .chip.origin{background:var(--sunken);color:var(--muted)}
 
   /* ---- existing GitHub activity (read-only) ----
      A third vocabulary, distinct from .anno (blue/green "this becomes a review
@@ -341,6 +406,8 @@
   .gh-thread.resolved{background:var(--rail);border-left-color:var(--faint);opacity:.85}
   .gh-thread.outdated{border-left-style:dashed}
   .gh-thread-body{padding:2px 12px 10px}
+  .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:var(--fs-label);
+         font-weight:var(--wt-medium);font-family:var(--font-mono);border:1px solid}
   .badge-gh{background:var(--sage);border-color:var(--sage-line);color:var(--sage-ink)}
   .chip.gh-resolved{background:var(--add-bg);border-color:var(--add-ink);color:var(--add-ink)}
   .chip.gh-open{background:var(--warn-bg);border-color:var(--warn);color:var(--warn-ink)}
@@ -351,13 +418,13 @@
   .gh-msg{border-top:1px solid var(--border);padding:8px 0 2px;margin:0}
   .gh-msg:first-child{border-top:0}
   .gh-who{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
-  .gh-who .gh-author{font-weight:600;color:var(--ink)}
+  .gh-who .gh-author{font-weight:var(--wt-semi);color:var(--ink)}
   .gh-body{white-space:pre-wrap;word-break:break-word;margin-top:3px}
   .gh-note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px}
   .gh-link{font-size:11.5px}
   .gh-link a{color:var(--teal);text-decoration:none}
   .gh-link a:hover{text-decoration:underline}
-  .gh-panel .panel-head .gh-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
+  .gh-panel .panel-head .gh-sub{margin-left:8px;font-weight:var(--wt-body);font-size:12px;color:var(--muted)}
   .gh-section{margin:0 0 14px}
   .gh-section:last-child{margin-bottom:0}
   .gh-section h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;
@@ -373,7 +440,7 @@
   /* ---- composer ---- */
   .composer{border:1px solid var(--teal);border-radius:8px;margin:8px 0;padding:12px;background:var(--mint)}
   .composer .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:12.5px}
-  .composer label{font-weight:600;color:var(--muted)}
+  .composer label{font-weight:var(--wt-semi);color:var(--muted)}
   .composer select,.composer textarea{font:inherit;font-size:13px;border:1px solid var(--border);
                                        border-radius:7px;padding:6px 9px;background:var(--card);color:var(--ink)}
   .composer textarea{width:100%;min-height:60px;resize:vertical}
@@ -386,7 +453,7 @@
      "this becomes a review comment" surfaces. Questions never reach GitHub, so
      every Q&A surface is grey/dashed and carries its own label. Same tokens,
      different voice. */
-  .qa-panel .panel-head .qa-sub{margin-left:8px;font-weight:400;font-size:12px;color:var(--muted)}
+  .qa-panel .panel-head .qa-sub{margin-left:8px;font-weight:var(--wt-body);font-size:12px;color:var(--muted)}
   /* The design's top card. It sits in #shell-notices, above the title, because an
      outstanding question is the one thing that should be read before the diff. */
   .qa-status-block{margin:0 0 18px;background:var(--mint);border:1px solid var(--teal);
@@ -408,7 +475,7 @@
      diff, so it stays lowercase and unboxed. */
   .qa-thread .qa-note{font-size:11px;color:var(--muted);margin-bottom:4px}
   .qa-msg{margin:6px 0;font-size:12.5px}
-  .qa-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;
+  .qa-label{display:block;font-size:11px;font-weight:var(--wt-semi);text-transform:uppercase;
             letter-spacing:.05em;color:var(--muted)}
   .qa-text{white-space:pre-wrap;word-break:break-word;color:var(--ink)}
   .qa-text.qa-muted{color:var(--muted);font-style:italic}
@@ -422,7 +489,7 @@
   .qa-q{padding-left:9px;border-left:2px solid var(--border)}
   .qa-a{margin-left:16px;padding-left:9px;border-left:2px solid var(--teal)}
   .qa-q > .qa-label{color:var(--faint)}
-  .qa-a > .qa-label{font-weight:700;color:var(--teal)}
+  .qa-a > .qa-label{font-weight:var(--wt-semi);color:var(--teal)}
   .qa-pending{font-size:12px;color:var(--muted);font-style:italic;margin:6px 0}
   .qa-notice{border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn-ink);
              border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px}
@@ -431,7 +498,7 @@
             display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .qa-composer{border:1px dashed var(--faint);border-radius:8px;margin:8px 0;
                padding:10px 12px;background:var(--sunken)}
-  .qa-composer .qa-composer-label{margin-bottom:6px;font-size:11px;font-weight:600;
+  .qa-composer .qa-composer-label{margin-bottom:6px;font-size:11px;font-weight:var(--wt-semi);
                                   text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
   .qa-composer textarea{font:inherit;font-size:13px;width:100%;min-height:56px;resize:vertical;
                         border:1px solid var(--border);border-radius:7px;padding:6px 9px;
@@ -588,6 +655,7 @@
 
       <div class="subtitle" id="page-meta">Pull request · reviewer mode</div>
       <h1 id="page-title">PR review</h1>
+      <div class="pagestats" id="page-stats"></div>
 
       <div id="shell-notices"></div>
 
@@ -664,8 +732,8 @@
 
   The §2 example renders two files (src/utils/formatDate.js and
   src/utils/formatDate.test.js), one overflow file, and one AI draft (a-2) that
-  appears inline with an "AI draft" badge, a dashed border, a "blocking"
-  severity chip, and Accept / Edit / Discard buttons. It starts EXCLUDED
+  appears inline as a solid card with a "Blocking" severity chip, a "Draft" chip,
+  and Accept / Edit / Discard / Ask buttons. It starts EXCLUDED
   (accepted:false) so the footer reads "0 of 1 AI drafts accepted" until you
   click Accept.
 -->
@@ -862,8 +930,20 @@
       ? ((DATA.repo || "") + (DATA.prNumber != null ? " #" + DATA.prNumber : "")).trim()
       : (DATA.branch || "");
     document.getElementById("topbar-repo").textContent = label || "pull request";
-    document.getElementById("page-meta").textContent =
-      (isPr ? "Pull request" : "Local branch") + " \u00b7 reviewer mode";
+    var meta = document.getElementById("page-meta");
+    var mode = (isPr ? "Pull request" : "Local branch") + " \u00b7 reviewer mode";
+    // The page is a snapshot, so this is when it was BUILT, never "now": rendering
+    // the current time would relabel a week-old page as fresh every time it is
+    // reopened. Absent timestamp means no timestamp - it is not invented.
+    var built = pageBuiltAt();
+    if (built) {
+      meta.textContent = mode + " \u00b7 " + formatStamp(built);
+      meta.title = "This page was generated " + formatStamp(built) +
+                   ". The diff and activity below are a snapshot from that moment.";
+    } else {
+      meta.textContent = mode;
+      meta.removeAttribute("title");
+    }
 
     // DATA.title is optional and absent from the current diff-JSON contract.
     // Honoured when present so adding it later needs no template change; the
@@ -894,13 +974,49 @@
       side.textContent = "Nothing is posted anywhere. Annotations return to the agent as a fix-list.";
     } else {
       dot.className = "status-dot";
-      dot.title = "Live. Submitting creates one pending review on GitHub, which you finalise there.";
+      // Live but unauthenticated is a real state, not a broken one: the server can
+      // be started without --session-dir/--nonce. Either way Ask is absent, and
+      // saying "Live" alone claimed a capability the page does not have - which is
+      // how a missing nonce cost every Ask affordance without anyone noticing.
+      dot.title = qaEnabled
+        ? "Live. Ask works, and submitting creates one pending review on GitHub, which you finalise there."
+        : "Live, without Q&A. Ask is unavailable this session. Submitting still creates one pending review on GitHub.";
       note.textContent = "submitting creates one pending review on GitHub \u00b7 you finalise the verdict there";
-      side.textContent = "Nothing is posted to GitHub until you submit. One pending review, drafts only.";
+      side.textContent = qaEnabled
+        ? "Nothing is posted to GitHub until you submit. One pending review, drafts only."
+        : "Nothing is posted to GitHub until you submit. Asking the agent is unavailable in this session.";
     }
 
     syncTopbarHeight();
     renderToc();
+  }
+
+  var STAMP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // "21 Aug, 09:41". Formatted by hand rather than via toLocaleString so the
+  // shape is identical for every reviewer; only the clock is local, which is the
+  // part that should follow the reader.
+  function formatStamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    var pad = function (n) { return n < 10 ? "0" + n : String(n); };
+    return d.getDate() + " " + STAMP_MONTHS[d.getMonth()] +
+           ", " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  // generatedAt is the real answer. existingActivity.fetchedAt is the fallback
+  // because the agent reads GitHub moments before writing the page, so it dates
+  // the same snapshot to within seconds.
+  function pageBuiltAt() {
+    if (typeof DATA.generatedAt === "string" && formatStamp(DATA.generatedAt)) {
+      return DATA.generatedAt;
+    }
+    if (activity && typeof activity.fetchedAt === "string" &&
+        formatStamp(activity.fetchedAt)) {
+      return activity.fetchedAt;
+    }
+    return null;
   }
 
   function syncTopbarHeight() {
@@ -1366,10 +1482,12 @@
     var n = el("div", "anno ai accepted collapsed");
     n.dataset.annoId = a.id;
     n.appendChild(el("span", "anno-accepted-pill", "Accepted"));
+    var main = el("div", "anno-accepted-main");
     var title = el("span", "anno-accepted-title", (a.body || "").split("\n")[0]);
     title.title = a.body || "";
-    n.appendChild(title);
-    n.appendChild(el("span", "anno-accepted-where", annoWhere(a)));
+    main.appendChild(title);
+    main.appendChild(el("span", "anno-accepted-where", annoWhere(a)));
+    n.appendChild(main);
     var undo = el("button", "link-btn", "Undo");
     undo.addEventListener("click", function (ev) { ev.stopPropagation(); onUndo(); });
     n.appendChild(undo);
@@ -1401,45 +1519,42 @@
     var n = el("div", cls);
     n.dataset.annoId = a.id;
 
-    var meta = el("div", "anno-meta");
+    var head = el("div", "anno-head");
     if (a.origin === "ai") {
-      meta.appendChild(badge("badge badge-ai", "AI draft"));
-      if (a.severity) meta.appendChild(chip("chip " + a.severity, severityLabel(a.severity)));
+      if (a.severity) head.appendChild(chip("chip " + a.severity, severityLabel(a.severity)));
+      head.appendChild(chip("chip origin", "Draft"));
     } else {
-      meta.appendChild(badge("badge badge-user", "you"));
+      head.appendChild(chip("chip origin", "You"));
     }
-    meta.appendChild(chip("chip type", a.type));
-    if (a.scope === "line" && a.lineStart != null) {
-      var rangeStr = a.lineStart === a.lineEnd ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
-      meta.appendChild(el("span", null, "line " + rangeStr + " (" + a.side + ")"));
-    } else if (a.scope === "file") {
-      meta.appendChild(el("span", null, "file-level"));
+    var anchor = el("span", "anno-anchor", annoAnchorLabel(a));
+    if (a.side) anchor.title = a.side === "LEFT" ? "on the removed side" : "on the added side";
+    head.appendChild(anchor);
+    if (a.origin === "ai") {
+      var queue = aiAnnotations.filter(function (x) { return !x._discarded; });
+      var pos = queue.indexOf(a);
+      if (pos !== -1) {
+        head.appendChild(el("span", "anno-index", (pos + 1) + " of " + queue.length));
+      }
     }
-    n.appendChild(meta);
+    n.appendChild(head);
 
-    n.appendChild(el("div", "anno-body", a.body || ""));
+    var body = el("div", "anno-body-wrap");
+    body.appendChild(el("div", "anno-body", a.body || ""));
     if (a.type === "suggestion" && a.suggestedCode != null) {
-      n.appendChild(el("div", "anno-code", a.suggestedCode));
+      body.appendChild(buildSuggestionBlock(a.suggestedCode));
     }
     // AI drafts only. A user annotation was typed by the reviewer moments ago with
     // the existing thread rendered directly above it, so repeating the fact back at
     // them is nagging; an AI draft is the one that needs a triage decision.
     if (a.origin === "ai") {
       var overlap = overlappingThreads(a);
-      if (overlap.length) n.appendChild(buildOverlapNote(a, overlap));
+      if (overlap.length) body.appendChild(buildOverlapNote(a, overlap));
     }
-    if (a.origin === "ai" && a.reasoning) {
-      var r = el("div", "anno-meta");
-      r.appendChild(el("em", null, "Why flagged: " + a.reasoning));
-      n.appendChild(r);
-    }
-    if (a.origin === "ai" && a.disproof) {
-      var dp = el("div", "anno-meta");
-      dp.appendChild(el("em", null, "Prove this wrong: " + a.disproof));
-      n.appendChild(dp);
-    }
-    if (a.origin === "ai" && a.background) {
-      n.appendChild(buildBackgroundBlock(a.background));
+    n.appendChild(body);
+
+    if (a.origin === "ai") {
+      var details = buildAnnoDetails(a, n);
+      if (details) body.appendChild(details);
     }
 
     var actions = el("div", "anno-actions");
@@ -1457,7 +1572,7 @@
       editBtn.addEventListener("click", function () {
         openComposer(n.parentNode, annoLineInfo(a), a.filePath, n, a);
       });
-      var discardBtn = el("button", "btn small danger", "Discard");
+      var discardBtn = el("button", "btn small", "Discard");
       discardBtn.addEventListener("click", function () {
         a._discarded = true; a.accepted = false;
         saveDraft(); renderAnnotations(); renderCounts();
@@ -1482,17 +1597,6 @@
           });
         });
         actions.appendChild(askBtn);
-        if (!a.background) {
-          // The `!a.background` guard is what removes this button once an answer
-          // to a background-request lands: attachAnswers() writes answer.background
-          // onto the annotation and re-renders, so the collapsed <details> above
-          // appears in the same pass that this button disappears.
-          var bgBtn = el("button", "btn small request-background-btn", "Request background");
-          bgBtn.addEventListener("click", function () {
-            requestBackground(a, bgBtn, n);
-          });
-          actions.appendChild(bgBtn);
-        }
       }
     } else {
       var uEdit = el("button", "btn small", "Edit");
@@ -1509,18 +1613,17 @@
     }
 
     if (a.origin === "ai") {
-      var queue = aiAnnotations.filter(function (x) { return !x._discarded; });
-      var pos = queue.indexOf(a);
-      if (pos !== -1) {
-        actions.appendChild(el("span", "anno-index", (pos + 1) + " of " + queue.length));
-      }
-
+      // Four hints for the four buttons. `?` is Ask, so it only appears when Ask
+      // does; advertising a key with nothing behind it is the defect this row
+      // exists to avoid.
       var hints = el("div", "anno-kbd");
-      [["a", "accept"], ["e", "edit"], ["x", "discard"]].forEach(function (pair) {
-        var k = el("kbd", null, pair[0]);
-        hints.appendChild(k);
-        hints.appendChild(el("span", null, pair[1]));
+      var keys = [["a", "accept"], ["e", "edit"], ["x", "discard"]];
+      if (qaEnabled) keys.push(["?", "ask"]);
+      keys.forEach(function (pair, i) {
+        if (i) hints.appendChild(el("span", "anno-kbd-sep", "\u00b7"));
+        hints.appendChild(el("kbd", null, pair[0]));
       });
+      hints.title = keys.map(function (p) { return p[0] + " " + p[1]; }).join(", ");
       actions.appendChild(hints);
 
       // Shortcuts are bound to the card, not the document, so a key only ever
@@ -1533,7 +1636,8 @@
         var t = ev.target;
         var tag = t && t.tagName ? t.tagName.toLowerCase() : "";
         if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable)) return;
-        var btn = ev.key === "a" ? acceptBtn : ev.key === "e" ? editBtn : ev.key === "x" ? discardBtn : null;
+        var btn = ev.key === "a" ? acceptBtn : ev.key === "e" ? editBtn
+                : ev.key === "x" ? discardBtn : ev.key === "?" ? askBtn : null;
         if (!btn) return;
         ev.preventDefault();
         var id = a.id;
@@ -1675,15 +1779,107 @@
   // finding itself: a real <details> element with no `open` attribute, so it is
   // collapsed until the reader asks for it. Built node-by-node and filled with
   // textContent (via el()) so an agent-authored string cannot inject markup.
-  function buildBackgroundBlock(text) {
+  // The design shows `line 45`, not `line 45 (RIGHT)`. The side still matters -
+  // a comment on a deleted line 45 is not the one on the added line 45 - so it
+  // moves to the title attribute rather than being dropped.
+  function annoAnchorLabel(a) {
+    if (a.scope === "file") return "file-level";
+    if (a.lineStart == null) return "";
+    var r = a.lineStart === a.lineEnd ? String(a.lineStart) : a.lineStart + "-" + a.lineEnd;
+    return "line " + r;
+  }
+
+  function buildSuggestionBlock(code) {
+    var wrap = el("div", "anno-sugg");
+    var head = el("div", "anno-sugg-head");
+    head.appendChild(el("span", "anno-sugg-label", "suggested change"));
+    var copy = el("button", "link-btn", "Copy");
+    copy.addEventListener("click", function () { copyToClipboard(code, copy); });
+    head.appendChild(copy);
+    wrap.appendChild(head);
+
+    var rows = el("div", "anno-sugg-code");
+    code.split("\n").forEach(function (text) {
+      var row = el("div", "anno-sugg-line");
+      row.appendChild(el("span", "anno-sugg-marker", "+"));
+      row.appendChild(el("span", "anno-sugg-text", text));
+      rows.appendChild(row);
+    });
+    wrap.appendChild(rows);
+    return wrap;
+  }
+
+  // The mockup's card runs body -> suggestion -> actions and never shows the AI
+  // metadata, but none of it is droppable: `disproof` is required on every
+  // blocking finding, it is what a reviewer runs to falsify the claim, and it is
+  // the one AI field build_review.py carries into the posted comment. One
+  // disclosure keeps the default view faithful and the evidence one click away.
+  function buildAnnoDetails(a, card) {
+    var rows = [];
+    if (a.reasoning) rows.push(["Why flagged", a.reasoning]);
+    if (a.disproof) rows.push(["Prove this wrong", a.disproof]);
+    if (a.background) rows.push(["Background", a.background]);
+    var canRequest = qaEnabled && !a.background;
+    if (!rows.length && !canRequest) return null;
+
     var d = document.createElement("details");
-    d.className = "anno-background";
-    d.appendChild(el("summary", null, "Background"));
-    d.appendChild(el("div", "anno-background-text", text));
+    d.className = "anno-details";
+    d.appendChild(el("summary", null, "Why this was flagged"));
+    var inner = el("div", "anno-details-body");
+    rows.forEach(function (r) {
+      var row = el("div", "anno-detail");
+      row.appendChild(el("span", "anno-detail-label", r[0]));
+      row.appendChild(el("span", "anno-detail-text", r[1]));
+      inner.appendChild(row);
+    });
+    if (canRequest) {
+      // Removing this button once background lands is what the !a.background
+      // guard is for: attachAnswers() writes answer.background onto the
+      // annotation and re-renders, so the Background row above appears in the
+      // same pass that this button disappears.
+      var bgBtn = el("button", "btn small request-background-btn", "Request background");
+      bgBtn.addEventListener("click", function () { requestBackground(a, bgBtn, card); });
+      inner.appendChild(bgBtn);
+    }
+    d.appendChild(inner);
     return d;
   }
 
-  function badge(cls, txt) { return el("span", cls, txt); }
+  // Both the fix-list button and each suggestion's Copy need this, and neither
+  // can afford to get it subtly wrong: writeText must be called synchronously in
+  // the click handler because Safari ties clipboard access to transient
+  // activation, which an intervening await drops.
+  function copyToClipboard(text, btn) {
+    var original = btn.textContent;
+    var p = navigator.clipboard
+      ? navigator.clipboard.writeText(text)
+      : Promise.reject(new Error("no clipboard API"));
+    function restore() {
+      setTimeout(function () { btn.textContent = original; }, 2000);
+    }
+    p.then(function () {
+      btn.textContent = "\u2713 Copied";
+      restore();
+    }).catch(function () {
+      // Off-screen, NOT display:none; hidden elements cannot be selected.
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        btn.textContent = "\u2713 Copied";
+      } catch (e) {
+        btn.textContent = "Copy failed";
+      }
+      setTimeout(function () {
+        btn.textContent = original;
+        document.body.removeChild(ta);
+      }, 2000);
+    });
+  }
+
   function chip(cls, txt) { return el("span", cls, txt); }
 
   function renderOverflow() {
@@ -2042,6 +2238,44 @@
     return t;
   }
 
+  // The scale of the change, then what still needs a decision. Driven by the same
+  // triage() snapshot as the sidebar and the progress bar, so the blocking count
+  // here can never disagree with the count in the file list.
+  function renderPageStats(t) {
+    var host = document.getElementById("page-stats");
+    if (!host) return;
+    clearNode(host);
+
+    var all = files.concat(overflowFiles);
+    var adds = 0, dels = 0;
+    all.forEach(function (f) {
+      adds += f.additions || 0;
+      dels += f.deletions || 0;
+    });
+
+    var size = el("span", "st-mono",
+      all.length + (all.length === 1 ? " file" : " files"));
+    host.appendChild(size);
+    host.appendChild(el("span", "st-mono st-dot", "\u00b7"));
+    host.appendChild(el("span", "st-mono", "+" + adds + " -" + dels));
+
+    if (t.blocking) {
+      host.appendChild(el("span", "st-sep", "\u00b7"));
+      host.appendChild(el("span", "st-blocking",
+        t.blocking + (t.blocking === 1 ? " blocking draft" : " blocking drafts")));
+    }
+
+    // "waiting on the agent", not the design's "waiting on you": these are
+    // questions the reviewer asked and the agent has not answered yet. Naming
+    // them the other way round would describe a feature that does not exist.
+    var waiting = qaEnabled ? pendingQuestions().length : 0;
+    if (waiting) {
+      host.appendChild(el("span", "st-sep", "\u00b7"));
+      host.appendChild(el("span", null, waiting +
+        (waiting === 1 ? " question" : " questions") + " waiting on the agent"));
+    }
+  }
+
   function renderProgress(t) {
     var wrap = document.getElementById("progress");
     if (!t.total) { wrap.hidden = true; }
@@ -2076,6 +2310,7 @@
   function renderCounts() {
     var t = triage();
     renderProgress(t);
+    renderPageStats(t);
     syncTocCounts(t);
     applyFilters();
 
@@ -3047,6 +3282,8 @@
   }
 
   function renderQaStatus() {
+    // Asking or answering changes the waiting count in the header line too.
+    renderPageStats(triage());
     if (!qaStatusHost) return;
     clearNode(qaStatusHost);
     var pending = pendingQuestions().length;
@@ -3262,36 +3499,7 @@
   if (DATA.mode !== "local") copyFixlistBtn.style.display = "none";
 
   copyFixlistBtn.addEventListener("click", function () {
-    var md = buildFixlistMarkdown();
-    var btn = this;
-    var original = btn.textContent;
-
-    // writeText must be called synchronously in the click handler: Safari ties
-    // clipboard access to transient activation, which an intervening await drops.
-    var p = navigator.clipboard
-      ? navigator.clipboard.writeText(md)
-      : Promise.reject(new Error("no clipboard API"));
-    p.then(function () {
-      btn.textContent = "✓ Copied";
-      setTimeout(function () { btn.textContent = original; }, 2000);
-    }).catch(function () {
-      // Off-screen, NOT display:none; hidden elements can't be selected.
-      var ta = document.createElement("textarea");
-      ta.value = md;
-      ta.style.cssText = "position:fixed;left:-9999px;top:0";
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand("copy");
-        btn.textContent = "✓ Copied";
-      } catch (e) {
-        btn.textContent = "Copy failed";
-      }
-      setTimeout(function () {
-        btn.textContent = original;
-        document.body.removeChild(ta);
-      }, 2000);
-    });
+    copyToClipboard(buildFixlistMarkdown(), this);
   });
 
   submitBtn.addEventListener("click", function () {

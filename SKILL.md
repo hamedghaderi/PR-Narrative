@@ -132,9 +132,11 @@ Exactly one thing differs: the AI pre-seed policy. Instead of the four-category 
 sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a one-sentence
 reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
 arrives pre-accepted, and zero findings is still a correct outcome; only the categories
-narrow to security. The `file_split` structural finding in `references/reviewer-ui.md`
-§2d is **not** part of this subcommand: how a file is organized is not a security
-finding, and its separate budget is not extra room for one here.
+narrow to security. The `file_split` and `over_engineered` structural findings in
+`references/reviewer-ui.md` §2d are **not** part of this subcommand: how a file is
+organized is not a security finding, and neither is whether it carries more machinery
+than today's requirements need. Their separate budget is not extra room for either
+here.
 
 Every reviewer-mode guardrail holds verbatim: a posted review is **PENDING** only, this
 skill never submits a verdict, and a local-path review posts nothing anywhere.
@@ -595,15 +597,22 @@ Every AI draft is injected `origin: "ai", accepted: false`, meaning it is **excl
 submission by default**, and only included if the user explicitly accepts it in the
 UI.
 
-One structural finding sits alongside those four categories: `file_split`, for a file
-this diff pushed into carrying a second responsibility. It is defined in
-`references/reviewer-ui.md` §2d and is **also locked**. In summary: `scope: "file"`,
-never `scope: "general"`; at most **2 per review**, counted separately so they never
-consume the ≤3/file or ≤10/review budget above; the diff itself must have made the
-structure worse; size alone is never evidence; and `disproof` is the check that would
-make the recommendation *inapplicable* rather than the concern false. Read
-`references/reviewer-ui.md` §2d before seeding one. It does not apply to
-`review-security`.
+Two structural findings sit alongside those four categories, both for files this diff
+touched. `file_split`: the diff pushed the file into carrying a second responsibility.
+`over_engineered`: the diff built machinery for requirements that do not exist yet,
+where a simpler construction would carry the same load today (an abstraction with one
+implementation and no second one coming, options nothing reads, a generic layer with a
+single hard-coded case). Both are defined in `references/reviewer-ui.md` §2d and are
+**also locked**. In summary: `scope: "file"`, never `scope: "general"`; **≤2 per review
+across both rules combined**, counted separately so they never consume the ≤3/file or
+≤10/review budget above; the diff itself must have made the structure worse; size alone
+is never evidence; `file_split` needs two named responsibilities plus a concrete
+extraction boundary, `over_engineered` needs the named symbols that could be deleted
+plus the simpler construction that replaces them; and a `blocking` structural finding
+carries a `disproof` naming the check that would void it (for `over_engineered`, proof
+the machinery is load-bearing after all). If you cannot produce that evidence, there is
+no finding. Read `references/reviewer-ui.md` §2d before seeding either. Neither applies
+to `review-security`.
 
 Finding the problem is only half of it. **Before you write any AI comment `body`, read and
 follow `references/reviewer-ui.md` §2c.** It is the single source of truth for order,
@@ -643,10 +652,10 @@ else's unverified comment into a finding you cannot support from the diff yourse
 you cannot support it, it is not your finding to make.
 
 None of this changes the locked pre-seed policy above. Do not add categories. Line
-comments go only on changed lines, and the one file-scoped exception is `file_split`
-under `references/reviewer-ui.md` §2d, on its own separate budget. Do not raise either
-set of caps, add values to the `severity` enum, change the zero-findings outcome, or
-leave out the required `disproof` on an `blocking` finding.
+comments go only on changed lines, and the only file-scoped exceptions are `file_split`
+and `over_engineered` under `references/reviewer-ui.md` §2d, on their own shared
+budget. Do not raise either set of caps, add values to the `severity` enum, change the
+zero-findings outcome, or leave out the required `disproof` on a `blocking` finding.
 
 ### 4. Build the page, serve it, and wait
 

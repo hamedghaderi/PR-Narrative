@@ -37,7 +37,7 @@ the PR itself.
 |---|---|---|
 | Where findings land | Terminal scrollback | A pending review on the PR, anchored to real diff lines |
 | How many you get | Unbounded | Hard cap: 3 per file, 10 per review, plus at most 2 file-structure notes |
-| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk. Plus one capped structural note: a file this diff pushed into a second responsibility |
+| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk. Plus two capped structural notes: a file this diff pushed into a second responsibility, or machinery this diff built for requirements that don't exist yet |
 | How findings are triaged | Manually interpreted and copied from chat or terminal output | Each finding is visibly accepted or rejected before submission |
 | Who signs the review | Ambiguous | You do. The skill never sets Approve, Request changes, or Comment |
 
@@ -46,8 +46,9 @@ stop at three findings in a file, so it writes eleven, and the two that mattered
 buried under nine that didn't. Seeding zero findings is an explicitly valid outcome:
 when nothing in the diff clears the bar, the page opens with no AI comments at all.
 
-The structural note is budgeted separately, at two per review, so "this file now does
-two things" can never take a slot away from a real bug.
+The structural notes are budgeted separately, at two per review across both kinds, so
+"this file now does two things" or "this machinery serves nobody yet" can never take a
+slot away from a real bug.
 
 ## How it works
 

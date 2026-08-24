@@ -250,8 +250,8 @@ exception to this list. It relaxes nothing else in this section.
 - **Scope**: only comment on lines that were actually **changed in this diff**: added,
   removed, or their immediate context. Never comment on unrelated pre-existing code
   just because it's visible in a hunk.
-- **Line-comment categories: exactly these four, nothing else** (the one file-scoped
-  exception is §2d):
+- **Line-comment categories: exactly these four, nothing else** (the file-scoped
+  exceptions live in §2d):
   1. Probable bugs or logic errors.
   2. Security issues.
   3. Missing error handling on new code paths.
@@ -306,7 +306,7 @@ and governed by §2c below).
 
 File-structure findings, which sit outside these caps, are defined in §2d below. A
 security-only variant of this policy, used by the review-security subcommand, is
-defined in §2b. The body-writing rules in §2c apply to all three.
+defined in §2b. The body-writing rules in §2c apply to all of them.
 
 ## 2b. Security-only pre-seed variant (review-security)
 
@@ -358,8 +358,9 @@ caps, and do not apply it outside the `review-security` subcommand. Ordinary bug
 missing error handling, and breaking-change risks belong to §2's list, not this one.
 
 **§2d does not apply here.** `review-security` seeds security findings only, and how a
-file is organized is not a security finding. Seed no `file_split` annotations under this
-subcommand, and do not treat §2d's separate budget as extra room for one.
+file is organized is not a security finding. Seed neither `file_split` nor
+`over_engineered` annotations under this subcommand, and do not treat §2d's separate
+budget as extra room for either.
 
 ## 2c. Writing the finding body (applies to §2, §2b and §2d)
 
@@ -769,52 +770,79 @@ concern that depends on a future change, so it is a `should_fix` unless the retr
 expected to change. Keep the claim this small. The result it states is the strongest one
 the evidence supports.
 
-## 2d. File-structure findings (LOCKED: separate budget, one rule)
+## 2d. File-structure findings (LOCKED: separate budget, two rules)
 
-§2 covers defects on changed lines. This section covers the single **structural**
-finding the pre-seed may make: a file this diff touched now carries more than one
-responsibility and should be split. It is deliberately narrow, because "consider
-extracting this into a helper" is the most common form of low-value AI review noise,
-and the point of §2 is to not produce that.
+§2 covers defects on changed lines. This section covers the **structural** findings the
+pre-seed may make about a file this diff touched. There are exactly two:
 
-- **One rule only: `file_split`.** Do not invent other structural findings. Function
-  length, naming, formatting, duplicated logic, and layering violations are **not**
-  covered here and are not reasons to comment. If you think one of them matters, it
-  either qualifies under a §2 category on its own evidence or it is not a finding.
-- **Scope is `"file"`**, never `"line"`. Set `filePath`; leave `lineStart`, `lineEnd`
-  and `side` as `null` (`references/annotation-schema.md` §1). `scripts/build_review.py`
-  anchors the posted comment to the first valid diff line in that file and prefixes the
-  body with `**File-level comment:**`. A file with no valid anchor line is dropped with
-  a warning, so a structural note on a pure-rename or mode-change file will not post.
-- **Never seed `scope: "general"`.** PR-level advice ("split this into smaller PRs")
-  has no triage path yet: `placeAnno()` in `assets/review-template.html` builds the
-  card and then returns without inserting it, while `renderCounts()` still counts it.
-  The reviewer would see a finding in the count and be unable to find, accept, or
-  reject it. A general-scope AI draft is a phantom. Keep PR-level advice out of
-  `aiAnnotations` entirely until that path exists.
-- **Budget: ≤2 per review, counted separately.** These do **not** count toward §2's ≤3
-  per file or ≤10 per review, so a structural note can never displace a probable bug.
-  Two is the ceiling for the entire review, not per file.
-- **The diff must have made it worse.** Seed this only when the changed regions
-  introduce or materially expand a second responsibility. A file that was already long
-  before this PR does not qualify; that is pre-existing structure, and the author of
-  this diff is not the right person to bill for it.
-- **Size alone is never sufficient.** Line count, function count and file length may
-  make you look, but they never justify the finding by themselves. You must be able to
-  name at least two distinct responsibilities, point at the symbols or regions that
-  carry them, and describe a concrete extraction boundary. If you cannot name the
-  boundary, there is no finding.
-- **`disproof` is the void condition.** For a defect, `disproof` is the check that
-  proves the concern false. For a recommendation it is the check that proves the
-  recommendation **inapplicable**: the smallest observable fact about the repository,
-  build or tests that would make you withdraw the advice. For example, "if the two
-  responsibilities share private state that cannot be extracted without exporting it,
-  this advice is void." That is concrete and checkable, so a `file_split` finding may
-  legitimately carry `severity: "blocking"`. If you cannot name such a check, set
-  `"should_fix"` or drop the finding, exactly as in §2. Never invent one.
-- **Do not recommend a split that cannot be made safely.** If the pieces would have to
-  ship together anyway, if separating them leaves a non-building intermediate state, or
-  if the churn is out of proportion to the benefit, there is no finding. Say nothing.
+- `file_split`: the diff pushed a file into carrying more than one responsibility and
+  it should be split.
+- `over_engineered`: the diff built machinery for requirements that do not exist
+  yet, and the simpler construction would carry the same load today.
+
+Both are deliberately narrow. "Consider extracting this into a helper" is the most
+common form of low-value AI review noise, and speculative-abstraction complaints are
+the second most common; the point of §2 is to not produce either at scale.
+
+- **Exactly two rules: `file_split` and `over_engineered`.** Do not invent others.
+  Function length, naming, formatting, duplicated logic, and layering violations are
+  **not** covered here and are not reasons to comment. Neither are generic taste
+  objections ("I would have modeled this differently"). If you think one of those
+  matters, it either qualifies under a §2 category on its own evidence or it is not a
+  finding.
+- **`over_engineered` requires absent requirements, not ugly code.** The bar is:
+  this diff added indirection, configurability, or generality whose only justification
+  is a caller or requirement that does not exist in the repository today. Concrete
+  qualifying shapes: an abstraction with exactly one implementation and no second one
+  planned; configuration options nothing reads; a plugin/generic layer with a single
+  hard-coded case. **Not** qualifying: extra structure carrying a stated requirement
+  of this PR, a test seam the diff's own tests use, or anything where removing the
+  abstraction would leave the diff's purpose unmet. If you cannot name what could be
+  deleted with no behavior change today, there is no finding.
+- **Scope is `"file"`**, never `"line"`, for both rules. Set `filePath`; leave
+  `lineStart`, `lineEnd` and `side` as `null`
+  (`references/annotation-schema.md` §1). Use `type: "concern"` for both.
+  `scripts/build_review.py` anchors the posted comment to the first valid diff line
+  in that file and prefixes the body with `**File-level comment:**`. A file with no
+  valid anchor line is dropped with a warning, so a structural note on a pure-rename
+  or mode-change file will not post.
+- **Never seed `scope: "general"`.** PR-level advice ("split this into smaller PRs",
+  "this whole design is over-engineered") has no triage path yet: `placeAnno()` in
+  `assets/review-template.html` builds the card and then returns without inserting it,
+  while `renderCounts()` still counts it. The reviewer would see a finding in the count
+  and be unable to find, accept, or reject it. A general-scope AI draft is a phantom.
+  Keep PR-level advice out of `aiAnnotations` entirely until that path exists.
+- **Budget: ≤2 per review across both rules combined**, counted separately from §2.
+  These do **not** count toward §2's ≤3 per file or ≤10 per review, so a structural
+  note can never displace a probable bug. Two is the ceiling for the entire review,
+  not per file, and not per rule: a `file_split` and an `over_engineered` on the same
+  file spend the whole budget.
+- **The diff must have made it worse.** Seed only when the changed regions introduced
+  or materially expanded the problem. For `file_split`, a file that was already doing
+  two jobs before this PR does not qualify; that is pre-existing structure, and the
+  author of this diff is not the right person to bill for it. The same holds for
+  `over_engineered`: complexity this diff merely carried forward is not billable here.
+- **Evidence must be concrete, and size alone is never sufficient.** Line count,
+  function count and file length may make you look, but they never justify the finding
+  by themselves. For `file_split`, name the two distinct responsibilities and the
+  concrete extraction boundary; if you cannot name the boundary, there is no finding.
+  For `over_engineered`, point at the symbols that would disappear and describe the
+  simpler construction that replaces them ("inline the two call sites and delete the
+  factory"); if the simpler version would lose behavior this PR needs, there is no
+  finding.
+- **`disproof` semantics for blocking findings.** For `file_split`, `disproof` is the
+  check that proves the recommendation *inapplicable*: "if the two responsibilities
+  share private state that cannot be extracted without exporting it, this advice is
+  void." For `over_engineered`, `disproof` is the check that proves the extra machinery
+  *load-bearing* after all: "grep shows a second caller added last month" or "the
+  option is read by the test harness" voids the finding. Both are concrete and
+  checkable, so either rule may legitimately carry `severity: "blocking"`. If you
+  cannot name such a check, set `"should_fix"` or drop the finding, exactly as in §2.
+  Never invent one.
+- **Do not recommend a change that cannot be made safely.** If the pieces would have
+  to ship together anyway, if separating them leaves a non-building intermediate
+  state, if the churn is out of proportion to the benefit, or if the simplification
+  would break a caller outside the diff, there is no finding. Say nothing.
 - **Same injection contract as §2**: always `origin: "ai"`, `accepted: false`, plus a
   `severity` and a one-sentence `reasoning`. Use `type: "concern"`.
 - **Zero is the normal outcome.** Most PRs produce no structural finding at all. An

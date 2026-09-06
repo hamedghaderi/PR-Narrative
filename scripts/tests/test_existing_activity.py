@@ -176,7 +176,7 @@ class UrlSafetyTests(unittest.TestCase):
 
     def test_offhost_url_is_dropped(self):
         raw = _response(threads=[_thread(
-            comments=[_comment("x", url="https://evil.example.com/pull/1")])])
+            comments=[_comment("x", url="https://elsewhere.example.org/pull/1")])])
         thread = _normalize(raw)["threads"][0]
         self.assertIsNone(thread["comments"][0]["url"])
 

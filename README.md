@@ -147,6 +147,9 @@ The CLI clones the repo, finds the `pr-narrative` skill, detects your agent, and
 installs it to the right directory. For flags like `--list`, `-g` and `--copy`, see the
 [`skills` CLI docs](https://github.com/vercel-labs/skills).
 
+Verify before installing: this skill runs shell commands through your agent. Read
+[`SKILL.md`](./SKILL.md) first, and check its security audit on the skills.sh listing.
+
 <details>
 <summary><strong>Requirements by mode</strong></summary>
 

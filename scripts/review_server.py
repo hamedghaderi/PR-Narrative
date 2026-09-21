@@ -20,6 +20,11 @@ field (see references/annotation-schema.md §3):
 Both are written verbatim to --out and resolve the single-shot wait identically; the
 server only routes on `kind`, it does not interpret the annotation contents.
 
+Three launch-time refusals guard against pages that would render but mislead: an
+unsubstituted build marker, a ``--nonce`` that disagrees with the page's ``sessionNonce``,
+and a reviewer-mode page whose diff JSON has no ``preseed: {"ran": true}`` record (the AI
+pre-seed step was skipped or not recorded; see references/annotation-schema.md §6).
+
 Standard library only; no pip installs. Usage:
 
     python3 review_server.py --page /tmp/pr-review-<branch>.html \
@@ -247,6 +252,46 @@ def qa_nonce_error(page_html, nonce, page_path="the page"):
     return None
 
 
+REVIEW_DATA_RE = re.compile(
+    r'<script[^>]*id="review-data"[^>]*>(.*?)</script>', re.DOTALL)
+PRESEED_RAN_RE = re.compile(r'"preseed"\s*:\s*\{[^{}]*"ran"\s*:\s*true')
+
+
+def is_reviewer_page(page_html):
+    """A reviewer-mode page carries the diff JSON; an author-mode page does not."""
+    return REVIEW_DATA_RE.search(page_html) is not None
+
+
+def preseed_error(page_html, page_path="the page"):
+    """Explain why a reviewer page cannot be served without a pre-seed record, or None.
+
+    The AI pre-seed step is the only step whose omission produces a valid page:
+    an empty ``aiAnnotations`` array is also the documented result of evaluating
+    every rule and finding nothing. Those two states were byte-identical, so a
+    skipped pre-seed looked exactly like a clean diff. The build step now has to
+    write ``preseed: {"ran": true, ...}`` into the diff JSON from the ledger file
+    (references/annotation-schema.md section 6), and this refuses to serve a
+    reviewer page that lacks it, the same way qa_nonce_error refuses a page whose
+    Ask UI would be silently absent. Author-mode pages have no review-data element
+    and are not affected.
+    """
+    if not is_reviewer_page(page_html):
+        return None
+    if PRESEED_RAN_RE.search(page_html):
+        return None
+    return (
+        "this is a reviewer-mode page but its diff JSON carries no "
+        'preseed: {"ran": true} record, so the AI pre-seed evaluation was not run '
+        "(or not recorded). An empty aiAnnotations array without that record is "
+        "indistinguishable from a skipped evaluation, which is why this refuses.\n"
+        f"  page : {page_path}\n"
+        "Write the pre-seed ledger (references/annotation-schema.md section 6), "
+        "load aiAnnotations and preseed from it in the page-build step "
+        "(references/reviewer-ui.md section 1), then rebuild the page. Zero "
+        "findings is a valid ledger; a missing ledger is not."
+    )
+
+
 def build_handler(
     page_html: str,
     out_path: str,
@@ -408,7 +453,8 @@ def main():
         page_html = fh.read()
 
     for problem in (marker_error(page_html, args.page),
-                    qa_nonce_error(page_html, args.nonce, args.page)):
+                    qa_nonce_error(page_html, args.nonce, args.page),
+                    preseed_error(page_html, args.page)):
         if problem:
             ap.error(problem)
 

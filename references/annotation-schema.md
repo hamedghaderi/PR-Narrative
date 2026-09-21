@@ -144,6 +144,7 @@ parsed GitHub files response; the agent adds the remaining top-level fields
 | `generatedAt`   | `string` (ISO 8601, optional) | When the page was built. Rendered at the top of the page as `21 Aug, 09:41` in the reader's own timezone, because the diff and activity below are a **snapshot** from that moment and do not update while the page is open. Omit it and the page falls back to `existingActivity.fetchedAt`, then shows no timestamp at all. The page never substitutes the current time: doing so would relabel a week-old snapshot as fresh every time it is reopened. |
 | `reviewRunId`   | `string` (optional)      | Random token generated once per page build. Appended to the page's `localStorage` key so a draft belongs to exactly ONE review run. Without it the key is only `repo/prNumber`, so a second review of the same PR rehydrates the first run's draft: annotations anchored to a diff that has since moved, and a saved `aiState` for id `"ai-1"` silently reapplying to whatever `"ai-1"` means this time, which can make a finding load pre-accepted or pre-discarded on its own. Omit it and the old key (and the old behavior) is used. |
 | `sessionNonce`  | `string`                 | Random hex string generated once per server run and embedded by the agent. The page includes it in every `POST /ask` and `POST /submit`; the server rejects requests with a mismatched or missing nonce with `409 Conflict`. This prevents a stale browser tab from a previous run on a reused port from writing into a new session. See §5 for the full Q&A contract. |
+| `preseed`       | `object`                 | **Required in reviewer mode.** Summary of the pre-seed ledger (§6.2): `{ran: true, rulesEvaluated, seeded, nearMisses, reportPath}`. `scripts/review_server.py` refuses to serve a reviewer-mode page without `preseed.ran === true`, because an empty `aiAnnotations` with no ledger is indistinguishable from a skipped evaluation. |
 
 ### Per-file object (`files[]`)
 
@@ -976,6 +977,111 @@ exists only for the agent's context and is persisted only inside the session dir
 
 ---
 
+## 6. Pre-seed ledger (`preseed`)
+
+The record that the AI pre-seed evaluation was **run**, whatever it found. It exists
+because the two outcomes "every rule was checked and nothing qualified" and "nobody
+looked" both used to produce `aiAnnotations: []`, and nothing anywhere could tell them
+apart: not the page, not the server, not the reviewer. The ledger is the artifact that
+makes the evaluation a step with an output, the same way `sessionNonce` made the Q&A
+handshake a step the server can refuse.
+
+Two shapes are involved. The **ledger file** is the agent's working artifact, written
+before the page is built. The **`preseed` summary** is what the build step copies from it
+into the §2 diff JSON, and what `scripts/review_server.py` refuses to serve without.
+
+### 6.1 Ledger file
+
+Path: `/tmp/pr-{n}-preseed.json` in PR mode, `/tmp/review-<branch>-preseed.json` in
+local mode (branch slashes replaced with `-`, as everywhere else).
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `ran` | `true` | Literal. Writing the file is the claim that the evaluation happened. |
+| `evaluatedAt` | `string` (ISO 8601) | When the ledger was written. |
+| `fiveQuestions` | `object` | One entry per question in `references/reviewer-ui.md` §2: `delete`, `duplicate`, `testsMirror`, `hiddenErrors`, `unexplainedFiles`. Each holds a one-or-two-sentence answer. `unexplainedFiles` is an array of paths and must match the narrative's "Changes this story does not explain" block. |
+| `rules` | `object` | One entry per rule, keyed as below. **All 16 keys are required.** A missing key means that rule was not evaluated, and the build step must refuse. |
+| `aiAnnotations` | `array` | The drafts that qualified, in §1 shape. This is the **only** source the build step may read `aiAnnotations` from. |
+
+The 16 rule keys, and the section that defines each:
+
+| Key | Rule |
+| --- | --- |
+| `s2.bugs` | §2 category 1, probable bugs or logic errors |
+| `s2.security` | §2 category 2 |
+| `s2.errorHandling` | §2 category 3, missing or hidden error handling |
+| `s2.breakingChange` | §2 category 4 |
+| `s2d.fileSplit` | §2d `file_split` |
+| `s2d.overEngineered` | §2d `over_engineered` |
+| `s2e.1` … `s2e.7` | §2e `ai_slop` signatures 1 through 7 |
+| `s2b.*` | **`review-security` only**: replaces the `s2.*`, `s2d.*` and `s2e.*` keys with `s2b.injection`, `s2b.authz`, `s2b.secrets`, `s2b.deserialization`, `s2b.supplyChain`. Five keys, all required. |
+
+Each rule entry:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `instances` | `array` of `{filePath, line?, note}` | Every place the pattern was observed, **including the ones that did not reach the threshold**. This is the field that forces the evaluation: a near miss has to be written down, not waved past. Empty array when nothing was seen. |
+| `seeded` | `integer` | How many of those instances became `aiAnnotations` entries. |
+| `why` | `string` | One sentence. Required when `instances` is non-empty and `seeded` is lower than the instance count: name the rule that held it back ("1 instance in the file, signature 4 needs 2", "cannot name a disproof, dropped to should_fix", "pre-existing, not billable to this diff"). When `instances` is empty, `"none observed"` is enough. |
+
+### 6.2 `preseed` summary (in the §2 diff JSON)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `ran` | `true` | Copied from the ledger. `scripts/review_server.py` refuses to serve a reviewer-mode page whose diff JSON does not contain `"preseed": {"ran": true, …}`. Author-mode pages have no `review-data` element and are unaffected. |
+| `rulesEvaluated` | `integer` | `len(ledger.rules)`. 16 normally, 5 under `review-security`. |
+| `seeded` | `integer` | `len(ledger.aiAnnotations)`. |
+| `nearMisses` | `integer` | Instances across all rules minus `seeded`. Shown to the reviewer so "0 drafts" reads as "0 drafts, 2 near misses" when that is the truth. |
+| `reportPath` | `string` | The ledger file path, for the final message and for anyone who wants to read the reasoning. |
+
+The page renders this in its stats line and its footer as "AI pre-seed ran: N rules
+checked, M drafts", or "AI pre-seed did not run" when the field is absent, which the
+server should already have refused.
+
+### 6.3 Worked example: a clean diff with two near misses
+
+```json
+{
+  "ran": true,
+  "evaluatedAt": "2026-09-21T15:02:00Z",
+  "fiveQuestions": {
+    "delete": "Nothing: every added class is called from the list page or the homepage.",
+    "duplicate": "lastTradingDatePerSource() resembles withPriceDataStartEnd() but is narrowed to candidates on purpose; the test explains why the scope cannot be used.",
+    "testsMirror": "it_agrees_with_the_single_source_evaluator compares two independent paths; no test computes its expectation with the code under test.",
+    "hiddenErrors": "guardAgainstUnpreloadedPriceHistory() returns early in production; already covered by an open thread on line 74.",
+    "unexplainedFiles": ["resources/platform-manual"]
+  },
+  "rules": {
+    "s2.bugs": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2.security": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2.errorHandling": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2.breakingChange": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2d.fileSplit": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2d.overEngineered": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2e.1": {"instances": [], "seeded": 0, "why": "every added comment names a reason"},
+    "s2e.2": {"instances": [], "seeded": 0, "why": "class docblocks match the file's existing convention"},
+    "s2e.3": {"instances": [{"filePath": "app/Actions/PriceSource/EvaluatePriceSourceChecksForSources.php", "line": 159, "note": "$checkedDates[$id] ?? null; checkedDates() builds every key"}], "seeded": 0, "why": "1 instance in the file, signature 3 needs 2"},
+    "s2e.4": {"instances": [{"filePath": "app/Http/ViewModels/HomepageViewModel.php", "line": 9, "note": "AnyVisiblePriceSourceCheckFails imported, never used"}], "seeded": 0, "why": "1 instance in the file, signature 4 needs 2"},
+    "s2e.5": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2e.6": {"instances": [], "seeded": 0, "why": "none observed"},
+    "s2e.7": {"instances": [], "seeded": 0, "why": "none observed"}
+  },
+  "aiAnnotations": []
+}
+```
+
+And the summary the build step derives from it:
+
+```json
+"preseed": {"ran": true, "rulesEvaluated": 16, "seeded": 0, "nearMisses": 2, "reportPath": "/tmp/pr-33897-preseed.json"}
+```
+
+A ledger like this one is a **correct** outcome. The rules held two near misses below
+threshold, the reviewer can see that they exist, and the final message names them. What
+this section forbids is the page that says `0 of 0 AI drafts` with no ledger behind it.
+
+---
+
 ## Field-name cheat sheet (cross-contract)
 
 A quick reference for implementers wiring these contracts together:
@@ -992,3 +1098,4 @@ A quick reference for implementers wiring these contracts together:
 | File render cap              | 30 files fully rendered in `files[]`; the rest go to `overflowFiles[]` |
 | Local fix-list filename token | literal substring `review-fixlist` in `/tmp/YYYY-MM-DD-review-fixlist-<branch>.md` |
 | Transcript scope invariant   | `transcript` is NEVER posted to GitHub and NEVER rendered into the fix-list (§3, §5) |
+| Pre-seed record              | `preseed: {ran: true, rulesEvaluated, seeded, nearMisses, reportPath}` in the §2 diff JSON, copied from the ledger file (§6); `review_server.py` refuses a reviewer page without it |

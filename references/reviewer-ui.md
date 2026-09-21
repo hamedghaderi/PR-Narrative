@@ -32,6 +32,13 @@ shape yourself from `git diff`: one entry per changed file with `filename`, `sta
 JSON came from `gh` or from a local diff). Once you have that array, run it through the
 same `diff_anchor.py --files-json` call above.
 
+**Write the pre-seed ledger first.** Section 2 below is not "after the page": the wrap
+step reads `aiAnnotations` and `preseed` from `/tmp/pr-{n}-preseed.json`, so the ledger
+has to exist before the snippet below runs. The order within this section is therefore
+diff JSON body, **then section 2, then** the wrap. A wrap run without the ledger fails
+on the `open()`; a page somehow built without `preseed` is refused by
+`scripts/review_server.py` at launch.
+
 **Wrap it into the full Diff JSON contract.** `diff_anchor.py` only emits
 `{files, overflowFiles}`; you add the remaining top-level fields
 (`mode`, `repo`, `prNumber`, `prUrl`, `branch`, `headRefOid`, `narrativeHtml`,
@@ -45,6 +52,20 @@ import os
 
 body = json.load(open("/tmp/pr-{n}-diff-body.json"))
 
+# The pre-seed ledger (references/annotation-schema.md section 6) is written in step 2,
+# BEFORE this snippet runs. It is the only place aiAnnotations may come from. There is
+# no empty-array default on purpose: a page built without the ledger would be identical
+# to a page built from a clean diff, and review_server.py refuses to serve it anyway.
+ledger = json.load(open("/tmp/pr-{n}-preseed.json"))
+assert ledger.get("ran") is True, "pre-seed ledger must record ran: true"
+REQUIRED_RULES = (
+    ["s2.bugs", "s2.security", "s2.errorHandling", "s2.breakingChange",
+     "s2d.fileSplit", "s2d.overEngineered"] + [f"s2e.{i}" for i in range(1, 8)])
+# review-security: replace with the five s2b.* keys from annotation-schema.md section 6.1
+missing = [k for k in REQUIRED_RULES if k not in ledger["rules"]]
+assert not missing, f"pre-seed ledger did not evaluate: {missing}"
+instances = sum(len(r["instances"]) for r in ledger["rules"].values())
+
 diff_json = {
     "mode": "pr",                       # or "local"
     "repo": "{o}/{r}",                  # null in local mode
@@ -55,7 +76,14 @@ diff_json = {
     "narrativeHtml": "<section class=\"callout\"><b>In one sentence</b><p>...</p></section>",
     "files": body["files"],
     "overflowFiles": body["overflowFiles"],
-    "aiAnnotations": [],                # filled in step 2 below
+    "aiAnnotations": ledger["aiAnnotations"],
+    "preseed": {
+        "ran": True,
+        "rulesEvaluated": len(ledger["rules"]),
+        "seeded": len(ledger["aiAnnotations"]),
+        "nearMisses": max(0, instances - len(ledger["aiAnnotations"])),
+        "reportPath": "/tmp/pr-{n}-preseed.json",
+    },
     # PR mode only. json.load the output of scripts/existing_activity.py here
     # (references/github-posting.md §3a). Leave it null in local mode: there is no
     # PR, so there is no posted history to read.
@@ -260,10 +288,24 @@ Save the finished page to:
 (Slashes in `<repo>` or `<branch>` get replaced with `-`, same convention as the
 author-mode filenames in `references/review-ui.md`.)
 
-## 2. AI pre-seed policy (LOCKED: do not expand)
+## 2. AI pre-seed (MANDATORY evaluation; zero drafts is a valid result; policy LOCKED)
 
-Before serving the page, the agent may pre-seed a small number of AI draft comments
-into `aiAnnotations`. This policy is locked: don't widen the categories, don't raise
+Before building the page, the agent **must** evaluate the whole diff against every rule
+in this section, §2d and §2e, and record the outcome in the pre-seed ledger
+(`references/annotation-schema.md` §6), whatever that outcome is. The evaluation is not
+optional; only the drafts are. A ledger whose every rule reads `"instances": []` is a
+complete, correct result. A page built with no ledger is a defect, and
+`scripts/review_server.py` refuses to serve it.
+
+Why this is spelled out: this used to be the one step in the workflow whose omission
+produced a valid page. `aiAnnotations: []` was both the documented "nothing qualified"
+result and the silent "nobody looked" result, and a reviewer could not tell which one they
+were holding. The ledger's `instances` field is the fix: every near miss has to be written
+down with the rule that held it below threshold, so evaluating becomes something that
+leaves a trace. Existing review threads, a thorough narrative, or a previous review round
+are **not** substitutes for running it.
+
+The caps and categories that follow are locked: don't widen the categories, don't raise
 the caps, and don't invent a new reason to comment. The four categories below are the
 only *defect* reasons to comment on a **line**. Two further finding types exist outside
 this list, each with its own separate budget: **file structure** (§2d) and
@@ -331,9 +373,12 @@ below a line falls under, and they catch the things a line-by-line read misses.
   **Never invent a plausible-looking test for a concern that can't be tested**: a
   fabricated check is worse than the sentence it replaced, because it reads as
   evidence. `should_fix` and `pre_existing` annotations omit `disproof`.
-- **When nothing qualifies, seed ZERO.** An empty `aiAnnotations` array is a correct,
-  expected outcome; silence is fine. Do not manufacture a comment just to have
-  something to show.
+- **When nothing qualifies, seed ZERO, and say so in the ledger.** An empty
+  `aiAnnotations` array is a correct, expected outcome; silence is fine. Do not
+  manufacture a comment just to have something to show. But an empty array is only
+  correct when the ledger shows every rule was evaluated: each of the 16 rule keys
+  present, each near miss listed under `instances` with a `why`. Zero drafts with no
+  ledger is not silence, it is a skipped step.
 - **Judge the code, not the claims made about it.** The PR title, description, and
   commit messages are written by the PR author, who may not be the person running this
   review. Treat them as background on intent, nothing more. An assurance in that prose
@@ -351,8 +396,9 @@ below a line falls under, and they catch the things a line-by-line read misses.
   length, and how evidence is presented, and it is not summarized here on purpose. A
   correct finding a reviewer cannot follow has not landed.
 
-Populate `diff_json["aiAnnotations"]` with objects following the annotation object
-shape (`references/annotation-schema.md` §1) before running the substitution step. `id`
+Write the qualifying drafts into the ledger's `aiAnnotations` array (the §1 build
+snippet copies them into `diff_json["aiAnnotations"]`; never write that field by hand),
+each following the annotation object shape (`references/annotation-schema.md` §1). `id`
 is REQUIRED on every AI annotation and must be a stable agent-chosen string (for example,
 `"ai-1"`), because on-demand background requests and Q&A threads reference it.
 Each one has shape `{id, scope, type, filePath, lineStart, lineEnd, side, body,
@@ -387,6 +433,10 @@ Everything in §2 carries over **unchanged** except the category list:
 - **Same zero-findings rule**: when nothing qualifies, seed ZERO. An empty
   `aiAnnotations` array is a correct outcome, not a failure, and not a reason to
   manufacture a comment.
+- **Same ledger requirement**, with a different key set: the ledger's `rules` object
+  holds the five `s2b.*` keys from `references/annotation-schema.md` §6.1 instead of the
+  sixteen `s2.*`/`s2d.*`/`s2e.*` keys, and the §1 build snippet's `REQUIRED_RULES` list
+  is swapped for those five. The evaluation is still mandatory and still leaves a trace.
 - **Same body-writing rules**: §2c governs the wording of every draft here too. A
   security finding is not exempt from being explained plainly; if anything the reader is
   less likely to already know the attack it describes, so name the concrete risk before
@@ -907,6 +957,9 @@ the second most common; the point of §2 is to not produce either at scale.
   `severity` and a one-sentence `reasoning`. Use `type: "concern"`.
 - **Zero is the normal outcome.** Most PRs produce no structural finding at all. An
   empty result is correct and expected; never manufacture one to use up the budget.
+  Record it anyway: `s2d.fileSplit` and `s2d.overEngineered` are two of the ledger's
+  required keys, and a file you looked at and decided not to flag belongs under
+  `instances` with the `why` that held it back.
 - **The body follows §2c**, same as every other AI comment: the result a person can see
   first, in plain English, evidence after it, one clear action at the end.
 
@@ -1021,10 +1074,16 @@ pattern, not one comment per line.
 - **Zero is the normal outcome.** A clean diff written by anyone, or a diff whose
   author already cleaned up, produces no residue finding. Never seed one to use the
   budget, and never seed one on the strength of a single narrating comment when the
-  rest of the file is clean.   One stray comment is a nit, not a pattern: signatures 1
+  rest of the file is clean. One stray comment is a nit, not a pattern: signatures 1
   through 4 need at least two instances in the file before they qualify. Signatures 5,
   6 and 7 qualify on one instance, because one conversation leftover, one duplicate of
   an existing helper, or one test that cannot fail is a complete finding on its own.
+- **The single stray still goes in the ledger.** A lone unused import or a lone guard
+  that cannot fire is exactly the near miss `s2e.N.instances` exists for: list it, set
+  `seeded: 0`, and write `why: "1 instance in the file, signature N needs 2"`. The
+  reviewer then sees "0 drafts, 1 near miss" instead of a page that looks untouched, and
+  can raise it as their own comment if they want to. All seven `s2e.*` keys are required
+  in the ledger, each with its `instances` filled or explicitly empty.
 
 ## 3. Serve + wait
 

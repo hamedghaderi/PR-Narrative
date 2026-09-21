@@ -687,7 +687,7 @@
 
     <section class="closing">
       <p class="closing-head" id="counts-line">
-        <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted · <span id="c-overlap-wrap" hidden><b id="c-overlap">0</b> already discussed · </span><b id="c-warn">0</b> warnings
+        <b id="c-user">0</b> comments · <b id="c-ai">0 of 0</b> AI drafts accepted <span id="c-preseed" class="mono"></span>· <span id="c-overlap-wrap" hidden><b id="c-overlap">0</b> already discussed · </span><b id="c-warn">0</b> warnings
       </p>
       <p class="closing-note mono" id="closing-note"></p>
       <div class="closing-general">
@@ -2241,6 +2241,23 @@
   // The scale of the change, then what still needs a decision. Driven by the same
   // triage() snapshot as the sidebar and the progress bar, so the blocking count
   // here can never disagree with the count in the file list.
+  function preseedRan() {
+    return !!(DATA.preseed && DATA.preseed.ran === true);
+  }
+
+  // Plain words for the ledger: how many rules were checked and how many drafts
+  // came out. When the record is absent the page says so instead of letting
+  // "0 of 0 AI drafts" pass as a clean result.
+  function preseedLabel() {
+    if (!preseedRan()) return "AI pre-seed did not run";
+    var p = DATA.preseed;
+    var rules = typeof p.rulesEvaluated === "number" ? p.rulesEvaluated : null;
+    var seeded = typeof p.seeded === "number" ? p.seeded : (DATA.aiAnnotations || []).length;
+    return "AI pre-seed ran" +
+      (rules !== null ? ": " + rules + (rules === 1 ? " rule" : " rules") + " checked" : "") +
+      ", " + seeded + (seeded === 1 ? " draft" : " drafts");
+  }
+
   function renderPageStats(t) {
     var host = document.getElementById("page-stats");
     if (!host) return;
@@ -2264,6 +2281,12 @@
       host.appendChild(el("span", "st-blocking",
         t.blocking + (t.blocking === 1 ? " blocking draft" : " blocking drafts")));
     }
+
+    // "0 AI drafts" alone cannot tell a clean diff from a skipped evaluation. The
+    // build step records the pre-seed ledger in DATA.preseed; name it here so the
+    // reviewer can see that every rule was checked, or that nothing was.
+    host.appendChild(el("span", "st-sep", "\u00b7"));
+    host.appendChild(el("span", preseedRan() ? null : "st-blocking", preseedLabel()));
 
     // "waiting on the agent", not the design's "waiting on you": these are
     // questions the reviewer asked and the agent has not answered yet. Naming
@@ -2320,6 +2343,7 @@
     var warnings = countUnanchored();
     document.getElementById("c-user").textContent = String(userCount);
     document.getElementById("c-ai").textContent = aiAccepted + " of " + aiTotal;
+    document.getElementById("c-preseed").textContent = "(" + preseedLabel() + ") ";
     document.getElementById("c-warn").textContent = String(warnings);
 
     // Live, because discarding a draft changes it. Hidden entirely at zero so a PR

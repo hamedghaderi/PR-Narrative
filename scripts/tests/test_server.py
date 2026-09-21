@@ -441,6 +441,51 @@ class QANonceConsistencyTestCase(unittest.TestCase):
         self.assertIsNone(review_server.page_session_nonce(self._page(None)))
 
 
+class PreseedGateTestCase(unittest.TestCase):
+    """A skipped AI pre-seed used to produce a page identical to a clean one:
+    `aiAnnotations: []` is both the "nothing qualified" result and the "never
+    looked" result. These lock the launch-time refusal that tells them apart.
+    """
+
+    def _reviewer_page(self, preseed=None):
+        data = {"mode": "pr", "repo": "a/b", "aiAnnotations": []}
+        if preseed is not None:
+            data["preseed"] = preseed
+        return '<html><script id="review-data" type="application/json">%s</script></html>' % json.dumps(data)
+
+    def test_reviewer_page_without_preseed_record_is_refused(self):
+        err = review_server.preseed_error(self._reviewer_page(None), "/tmp/x.html")
+        self.assertIsNotNone(err)
+        self.assertIn("pre-seed", err)
+        self.assertIn("/tmp/x.html", err)
+        self.assertIn("section 6", err)
+
+    def test_preseed_ran_false_is_refused(self):
+        err = review_server.preseed_error(self._reviewer_page({"ran": False}))
+        self.assertIsNotNone(err)
+
+    def test_preseed_ran_true_with_zero_findings_is_accepted(self):
+        """Zero findings is a valid ledger; only a missing ledger is refused."""
+        page = self._reviewer_page({"ran": True, "rulesEvaluated": 13, "seeded": 0,
+                                    "reportPath": "/tmp/pr-1-preseed.json"})
+        self.assertIsNone(review_server.preseed_error(page))
+
+    def test_author_mode_page_is_not_affected(self):
+        """Author-mode pages have no review-data element and no pre-seed step."""
+        page = '<html><body data-branch="x"><script id="pr-body-md" type="application/json">"# hi"</script></body></html>'
+        self.assertFalse(review_server.is_reviewer_page(page))
+        self.assertIsNone(review_server.preseed_error(page))
+
+    def test_preseed_key_inside_diff_text_does_not_satisfy_the_gate(self):
+        """The record must be the top-level preseed object, not a diff line that
+        happens to mention it. A diff line is a JSON string, so its quotes are
+        escaped and the regex cannot match it."""
+        data = {"mode": "pr", "aiAnnotations": [],
+                "files": [{"hunks": [{"lines": [{"text": '"preseed": {"ran": true}'}]}]}]}
+        page = '<html><script id="review-data">%s</script></html>' % json.dumps(data)
+        self.assertIsNotNone(review_server.preseed_error(page))
+
+
 class QADisabledServerTestCase(unittest.TestCase):
     def test_ask_and_answers_return_404_when_session_dir_is_not_configured(self):
         with tempfile.TemporaryDirectory() as tmpdir:

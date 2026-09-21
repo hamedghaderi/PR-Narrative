@@ -138,7 +138,9 @@ as written there), the fetch-and-understand work in §2, the page build, serve a
 path where applicable. Do not re-invent any of it here.
 
 Exactly one thing differs: the AI pre-seed policy. Instead of the four-category policy in
-§3, use the security-only variant defined in `references/reviewer-ui.md §2b`. In one
+§3, use the security-only variant defined in `references/reviewer-ui.md §2b`. The
+pre-seed ledger is still mandatory; its `rules` object holds the five `s2b.*` keys from
+`references/annotation-schema.md` §6.1 instead of the thirteen general ones. In one
 sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a one-sentence
 reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
 arrives pre-accepted, and zero findings is still a correct outcome; only the categories
@@ -597,10 +599,30 @@ understand:
   the author explain every changed file?": you cannot answer it, so you hand the list to
   the reviewer, who asks the author. It is never an AI annotation.
 
-### 3. AI pre-seed (optional, capped, locked policy)
+### 3. AI pre-seed (MANDATORY evaluation; zero drafts is a valid result; policy locked)
 
-You may pre-seed a small number of AI draft comments on genuinely risky lines before
-serving the page. Before you pick a single line, run the **five questions** at the top
+This step is not optional, and it has an output. Before the page is built you **must**
+evaluate the whole diff against every rule in `references/reviewer-ui.md` §2, §2d and §2e
+and write the result to the pre-seed ledger, `/tmp/pr-{n}-preseed.json` (local:
+`/tmp/review-<branch>-preseed.json`), in the shape defined in
+`references/annotation-schema.md` §6. The ledger lists, per rule, every instance you
+observed, how many became drafts, and the one sentence that held the rest below
+threshold. The page-build step in §4 reads `aiAnnotations` **from that file**; there is
+no empty-array default. `scripts/review_server.py` refuses to serve a reviewer page whose
+diff JSON does not carry `preseed: {"ran": true}`.
+
+Why this is spelled out: it used to be the one step whose omission produced a valid page.
+`aiAnnotations: []` was both "every rule was checked and nothing qualified" and "nobody
+looked", and neither the page nor the reviewer could tell which. Eleven existing review
+threads, a careful narrative, or a previous round of review do not stand in for running
+it. Neither does reading the diff "with the rules in mind": if the near misses are not
+written down, the evaluation did not happen.
+
+What is optional is the **drafts**. Most diffs produce few or none, and a ledger whose
+every rule reads `"instances": []` is a complete, correct result. Only the ledger is
+required.
+
+Before you pick a single line, run the **five questions** at the top
 of `references/reviewer-ui.md` §2 over the whole diff: what could be deleted without
 losing the requested behavior, what duplicates something already in the repository,
 whether the tests verify the requirement or only mirror the implementation, whether an
@@ -707,7 +729,8 @@ Build the annotation page from `assets/review-template.html` following
 `references/reviewer-ui.md` §1: run `scripts/diff_anchor.py` against the files JSON
 to get `{files, overflowFiles}`, wrap that into the full diff-JSON contract
 (`references/annotation-schema.md` §2, which adds `mode`, `repo`, `prNumber`, `prUrl`,
-`branch`, `headRefOid`, `narrativeHtml`, `aiAnnotations`), substitute the three
+`branch`, `headRefOid`, `narrativeHtml`, and `aiAnnotations` plus `preseed`, both
+loaded from the §3 ledger file, never typed in), substitute the three
 injection markers (`__FONT_CSS__` first — see `references/reviewer-ui.md` §1 for
 why the order matters), and save it: PR path to
 `/tmp/YYYY-MM-DD-pr-annotate-<repo>-<n>.html`, local path to
@@ -753,6 +776,15 @@ If the nonce you pass to `--nonce` is not the one baked into the page, the serve
 **refuses to start** and tells you both values. That is a build-order mistake, almost
 always the `export` and the page build landing in two different Bash calls: fix it by
 rebuilding the page in the same call as the `export`, not by dropping the flag.
+
+The server also refuses a reviewer page whose diff JSON has no `preseed: {"ran": true}`
+record. That is a §3 mistake, not a build mistake: the pre-seed ledger was never written,
+or the wrap step did not read from it. Go back to §3, write the ledger, rebuild. Do not
+add the field by hand.
+
+When you hand the URL to the user, the same message states the pre-seed outcome from the
+ledger in one line ("AI pre-seed: 13 rules evaluated, 0 drafts, 2 near misses") and lists
+the near misses. The user should never have to ask whether the evaluation ran.
 
 The Ask UI also takes spoken questions: a push-to-talk mic button dictates into the
 question box (transcript editable before sending), every answer carries a read-aloud
@@ -977,6 +1009,12 @@ question cannot produce a review verdict.
   the review is **PENDING**; they finalize it (Approve / Request changes /
   Comment) themselves on github.com. Reviewer mode never calls the finalize
   endpoint.
+- **Both modes, in the same message**: state the pre-seed outcome in one line, from
+  the ledger: "AI pre-seed: 13 rules evaluated, N drafts seeded, M near misses
+  (`<reportPath>`)", and name each near miss in a short list (file, rule, the `why`).
+  This is how the user learns that "0 drafts" meant "checked, nothing qualified" and
+  not "skipped", and it is where a below-threshold stray (one unused import, one
+  guard that cannot fire) gets a chance to become the user's own comment.
 - **Local mode**: nothing is posted anywhere. Render the `accepted: true`
   annotations into the fix-list Markdown
   (`references/annotation-schema.md` §4), save to
@@ -998,6 +1036,13 @@ question cannot produce a review verdict.
 
 ### Quality bar: reviewer mode
 
+- The pre-seed ledger exists at the §3 path, records `ran: true`, and has every required
+  rule key (13, or the five `s2b.*` keys under `review-security`), each with its
+  `instances` filled or explicitly empty. The page's stats line reads "AI pre-seed ran",
+  never "did not run". A page showing `0 of 0 AI drafts` with no ledger behind it is a
+  defect, not a clean result, and the server should already have refused it.
+- The message that hands the page to the user, and the message after submit, both name
+  the pre-seed outcome and list the near misses from the ledger.
 - Every comment's anchor validated against the real hunks before it was posted or
   fix-listed; no bad-anchor `422`s reaching GitHub.
 - If you seeded AI drafts, they stayed inside the caps (≤3/file, ≤10/review for §2
@@ -1064,6 +1109,11 @@ These hold regardless of mode; read them before you touch `gh` or GitHub:
 - **MUST** treat AI-pre-seeded drafts as excluded by default; only annotations the
   user explicitly accepted (in the UI, at submit time) are ever posted or
   fix-listed.
+- **MUST** run the AI pre-seed evaluation and write the ledger
+  (`references/annotation-schema.md` §6) before building any reviewer-mode page, in
+  every reviewer-mode invocation including `review-security`, and **MUST NOT** treat
+  existing review threads, the narrative, a prior review round, or the size of the
+  diff as a reason to skip it. Zero drafts is allowed; a missing ledger is not.
 - **MUST** make zero GitHub API calls in author mode; it never runs `gh` at all,
   it only reads the local git history and diff.
 - **MUST** keep reviewer mode and `review-security` to the `gh` usage already

@@ -140,7 +140,7 @@ path where applicable. Do not re-invent any of it here.
 Exactly one thing differs: the AI pre-seed policy. Instead of the four-category policy in
 §3, use the security-only variant defined in `references/reviewer-ui.md §2b`. The
 pre-seed ledger is still mandatory; its `rules` object holds the five `s2b.*` keys from
-`references/annotation-schema.md` §6.1 instead of the sixteen general ones. In one
+`references/annotation-schema.md` §6.1 instead of the thirteen general ones. In one
 sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a one-sentence
 reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
 arrives pre-accepted, and zero findings is still a correct outcome; only the categories
@@ -783,7 +783,7 @@ or the wrap step did not read from it. Go back to §3, write the ledger, rebuild
 add the field by hand.
 
 When you hand the URL to the user, the same message states the pre-seed outcome from the
-ledger in one line ("AI pre-seed: 16 rules evaluated, 0 drafts, 2 near misses") and lists
+ledger in one line ("AI pre-seed: 13 rules evaluated, 0 drafts, 2 near misses") and lists
 the near misses. The user should never have to ask whether the evaluation ran.
 
 The Ask UI also takes spoken questions: a push-to-talk mic button dictates into the
@@ -1010,7 +1010,7 @@ question cannot produce a review verdict.
   Comment) themselves on github.com. Reviewer mode never calls the finalize
   endpoint.
 - **Both modes, in the same message**: state the pre-seed outcome in one line, from
-  the ledger: "AI pre-seed: 16 rules evaluated, N drafts seeded, M near misses
+  the ledger: "AI pre-seed: 13 rules evaluated, N drafts seeded, M near misses
   (`<reportPath>`)", and name each near miss in a short list (file, rule, the `why`).
   This is how the user learns that "0 drafts" meant "checked, nothing qualified" and
   not "skipped", and it is where a below-threshold stray (one unused import, one
@@ -1037,7 +1037,7 @@ question cannot produce a review verdict.
 ### Quality bar: reviewer mode
 
 - The pre-seed ledger exists at the §3 path, records `ran: true`, and has every required
-  rule key (16, or the five `s2b.*` keys under `review-security`), each with its
+  rule key (13, or the five `s2b.*` keys under `review-security`), each with its
   `instances` filled or explicitly empty. The page's stats line reads "AI pre-seed ran",
   never "did not run". A page showing `0 of 0 AI drafts` with no ledger behind it is a
   defect, not a clean result, and the server should already have refused it.

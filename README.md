@@ -49,7 +49,7 @@ when nothing in the diff clears the bar, the page opens with no AI comments at a
 Zero is only allowed to mean "checked, nothing qualified", never "did not look". The
 evaluation writes a ledger before the page is built: every rule, every instance it saw,
 and the one sentence that kept a near miss below threshold. The page reads its AI drafts
-from that ledger, shows "AI pre-seed ran: 16 rules checked, 0 drafts" in its stats line,
+from that ledger, shows "AI pre-seed ran: 13 rules checked, 0 drafts" in its stats line,
 and the server refuses to serve a reviewer page built without it. A lone unused import
 that does not meet the two-instance rule still shows up as a near miss you can raise
 yourself.

@@ -1000,10 +1000,10 @@ local mode (branch slashes replaced with `-`, as everywhere else).
 | `ran` | `true` | Literal. Writing the file is the claim that the evaluation happened. |
 | `evaluatedAt` | `string` (ISO 8601) | When the ledger was written. |
 | `fiveQuestions` | `object` | One entry per question in `references/reviewer-ui.md` §2: `delete`, `duplicate`, `testsMirror`, `hiddenErrors`, `unexplainedFiles`. Each holds a one-or-two-sentence answer. `unexplainedFiles` is an array of paths and must match the narrative's "Changes this story does not explain" block. |
-| `rules` | `object` | One entry per rule, keyed as below. **All 16 keys are required.** A missing key means that rule was not evaluated, and the build step must refuse. |
+| `rules` | `object` | One entry per rule, keyed as below. **All 13 keys are required.** A missing key means that rule was not evaluated, and the build step must refuse. |
 | `aiAnnotations` | `array` | The drafts that qualified, in §1 shape. This is the **only** source the build step may read `aiAnnotations` from. |
 
-The 16 rule keys, and the section that defines each:
+The 13 rule keys, and the section that defines each:
 
 | Key | Rule |
 | --- | --- |
@@ -1029,7 +1029,7 @@ Each rule entry:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `ran` | `true` | Copied from the ledger. `scripts/review_server.py` refuses to serve a reviewer-mode page whose diff JSON does not contain `"preseed": {"ran": true, …}`. Author-mode pages have no `review-data` element and are unaffected. |
-| `rulesEvaluated` | `integer` | `len(ledger.rules)`. 16 normally, 5 under `review-security`. |
+| `rulesEvaluated` | `integer` | `len(ledger.rules)`. 13 normally, 5 under `review-security`. |
 | `seeded` | `integer` | `len(ledger.aiAnnotations)`. |
 | `nearMisses` | `integer` | Instances across all rules minus `seeded`. Shown to the reviewer so "0 drafts" reads as "0 drafts, 2 near misses" when that is the truth. |
 | `reportPath` | `string` | The ledger file path, for the final message and for anyone who wants to read the reasoning. |
@@ -1073,7 +1073,7 @@ server should already have refused.
 And the summary the build step derives from it:
 
 ```json
-"preseed": {"ran": true, "rulesEvaluated": 16, "seeded": 0, "nearMisses": 2, "reportPath": "/tmp/pr-33897-preseed.json"}
+"preseed": {"ran": true, "rulesEvaluated": 13, "seeded": 0, "nearMisses": 2, "reportPath": "/tmp/pr-33897-preseed.json"}
 ```
 
 A ledger like this one is a **correct** outcome. The rules held two near misses below

@@ -376,7 +376,7 @@ below a line falls under, and they catch the things a line-by-line read misses.
 - **When nothing qualifies, seed ZERO, and say so in the ledger.** An empty
   `aiAnnotations` array is a correct, expected outcome; silence is fine. Do not
   manufacture a comment just to have something to show. But an empty array is only
-  correct when the ledger shows every rule was evaluated: each of the 16 rule keys
+  correct when the ledger shows every rule was evaluated: each of the 13 rule keys
   present, each near miss listed under `instances` with a `why`. Zero drafts with no
   ledger is not silence, it is a skipped step.
 - **Judge the code, not the claims made about it.** The PR title, description, and
@@ -435,7 +435,7 @@ Everything in §2 carries over **unchanged** except the category list:
   manufacture a comment.
 - **Same ledger requirement**, with a different key set: the ledger's `rules` object
   holds the five `s2b.*` keys from `references/annotation-schema.md` §6.1 instead of the
-  sixteen `s2.*`/`s2d.*`/`s2e.*` keys, and the §1 build snippet's `REQUIRED_RULES` list
+  thirteen `s2.*`/`s2d.*`/`s2e.*` keys, and the §1 build snippet's `REQUIRED_RULES` list
   is swapped for those five. The evaluation is still mandatory and still leaves a trace.
 - **Same body-writing rules**: §2c governs the wording of every draft here too. A
   security finding is not exempt from being explained plainly; if anything the reader is

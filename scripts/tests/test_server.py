@@ -466,7 +466,7 @@ class PreseedGateTestCase(unittest.TestCase):
 
     def test_preseed_ran_true_with_zero_findings_is_accepted(self):
         """Zero findings is a valid ledger; only a missing ledger is refused."""
-        page = self._reviewer_page({"ran": True, "rulesEvaluated": 16, "seeded": 0,
+        page = self._reviewer_page({"ran": True, "rulesEvaluated": 13, "seeded": 0,
                                     "reportPath": "/tmp/pr-1-preseed.json"})
         self.assertIsNone(review_server.preseed_error(page))
 

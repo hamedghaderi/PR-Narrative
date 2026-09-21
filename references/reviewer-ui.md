@@ -167,6 +167,28 @@ Two things this feature deliberately does **not** do:
 "In one sentence" as plain text inside `<b>` and let the sheet do the rest. Everything
 after it is the problem story.
 
+**It must close with the unexplained-files block when there is anything to put in it.**
+While writing the story you connected each changed file to the PR's purpose. Any file
+you could not connect goes here, after the story, in this shape:
+
+```html
+<section class="callout"><b>Changes this story does not explain</b>
+<ul>
+<li><code>path/to/file.ext</code>: one plain sentence saying what changed and why it does not fit the story.</li>
+</ul>
+<p>Ask the author to account for these before finalizing the review.</p>
+</section>
+```
+
+The test for inclusion is honest ignorance, not suspicion: you list a file because you
+could not build the bridge from it to the one-sentence summary, whatever the reason. Do
+not speculate about why it is there. A file that carries its own small, obviously
+separate fix (a typo, a lockfile bump the PR needs) still qualifies if the story does not
+mention it; the point is that the reviewer asks, and the author answers in one line.
+When every file is accounted for, omit the block entirely. Never write an empty one, and
+never turn its contents into `aiAnnotations` entries: a PR-scoped draft has no triage
+path (§2d, `scope: "general"`), and the question belongs to a person anyway.
+
 Do not put a single `.panel` around that whole story as an outer wrapper: the
 Narrative panel already draws that card, so a second one just boxes the content
 twice. Panels are still the right markup *inside* the story wherever a section
@@ -243,25 +265,59 @@ author-mode filenames in `references/review-ui.md`.)
 Before serving the page, the agent may pre-seed a small number of AI draft comments
 into `aiAnnotations`. This policy is locked: don't widen the categories, don't raise
 the caps, and don't invent a new reason to comment. The four categories below are the
-only reasons to comment on a **line**. One further finding type exists for **file
-structure**, defined in §2d; it carries its own separate budget and is the only
-exception to this list. It relaxes nothing else in this section.
+only *defect* reasons to comment on a **line**. Two further finding types exist outside
+this list, each with its own separate budget: **file structure** (§2d) and
+**generated-code residue** (§2e, the `ai_slop` rule). Neither relaxes anything else in
+this section.
+
+**Five questions to ask before seeding anything.** Run these over the whole diff first.
+They do not add categories or budget; they are the lens that decides which of the rules
+below a line falls under, and they catch the things a line-by-line read misses.
+
+1. **What could we delete without losing the requested behavior?** Anything you can
+   name is either machinery for a requirement that does not exist (`over_engineered`,
+   §2d) or a leftover nothing reads (`ai_slop` signature 4, §2e). If you cannot name
+   what would be deleted and why the behavior survives, there is no finding.
+2. **Does this duplicate something already in the repository?** Search before you
+   answer. A match with a real `file:line` is `ai_slop` signature 6. "Something like
+   this probably exists" is not a finding.
+3. **Do the tests verify the requirement, or reproduce the implementation's
+   assumptions?** A test that computes its expected value with the same logic as the
+   code, mocks the unit it claims to test, or asserts only that something is not null
+   or did not throw, is `ai_slop` signature 7. A test that would still pass if the
+   requirement were violated has not tested it.
+4. **Does an error become visible, or get quietly converted into "success"?** A new
+   path with no handler and a new path whose handler turns the failure into a normal
+   result are the same defect seen from two sides; both are §2 category 3 below.
+5. **Can the author explain every changed file?** You cannot answer this, but you can
+   set it up: any changed file whose change you could not connect to the PR's purpose
+   while writing the narrative is listed in the narrative panel under
+   "Changes this story does not explain" (§1). That list is for the reviewer to take
+   to the author. It is never an `aiAnnotations` entry, because a PR-scoped draft has
+   no triage path (see §2d on `scope: "general"`).
 
 - **Scope**: only comment on lines that were actually **changed in this diff**: added,
   removed, or their immediate context. Never comment on unrelated pre-existing code
   just because it's visible in a hunk.
 - **Line-comment categories: exactly these four, nothing else** (the file-scoped
-  exceptions live in §2d):
+  exceptions live in §2d; the residue rule, which is line-anchored but not a defect
+  category, lives in §2e):
   1. Probable bugs or logic errors.
   2. Security issues.
-  3. Missing error handling on new code paths.
+  3. Missing or hidden error handling on new code paths. "Hidden" means the error is
+     caught and turned into a result the caller reads as success: an empty list, a
+     `null`, a default, a `false`, a logged warning followed by `continue`, or a bare
+     `except: pass`. The caller cannot tell the failure from a real answer, so the
+     evidence must name the caller and what it does with that answer. Catching an
+     error and re-raising, or returning an explicit error the caller checks, is not
+     hiding.
   4. Breaking-change risks to callers of the changed code.
 - **Hard caps**: **≤3 per file, ≤10 per review**: count against the whole
   `aiAnnotations` array before injection, not just what you'd like to say. If a file
   has more than 3 genuinely risky lines, pick the 3 most severe and drop the rest
   silently; if the review as a whole would exceed 10, trim across files by severity
-  until it's at ≤10 per review. File-structure findings under §2d have their own
-  budget and do **not** consume either cap.
+  until it's at ≤10 per review. File-structure findings under §2d and residue
+  findings under §2e have their own budgets and do **not** consume either cap.
 - **Every AI annotation carries `severity` and one-sentence `reasoning`**: no
   unexplained flags. `severity` is one of `"blocking" | "should_fix" | "pre_existing"`
   (`references/annotation-schema.md` §1); never a value outside that set.
@@ -304,9 +360,10 @@ suggestedCode?, background?, origin: "ai", accepted: false, severity, reasoning,
 (`disproof` present exactly when `severity` is `"blocking"`; `background` is optional
 and governed by §2c below).
 
-File-structure findings, which sit outside these caps, are defined in §2d below. A
-security-only variant of this policy, used by the review-security subcommand, is
-defined in §2b. The body-writing rules in §2c apply to all of them.
+File-structure findings, which sit outside these caps, are defined in §2d below, and
+generated-code residue findings, also outside these caps, in §2e. A security-only
+variant of this policy, used by the review-security subcommand, is defined in §2b. The
+body-writing rules in §2c apply to all of them.
 
 ## 2b. Security-only pre-seed variant (review-security)
 
@@ -357,15 +414,16 @@ This variant is **locked**, same as §2: do not widen the categories, do not rai
 caps, and do not apply it outside the `review-security` subcommand. Ordinary bugs,
 missing error handling, and breaking-change risks belong to §2's list, not this one.
 
-**§2d does not apply here.** `review-security` seeds security findings only, and how a
-file is organized is not a security finding. Seed neither `file_split` nor
-`over_engineered` annotations under this subcommand, and do not treat §2d's separate
-budget as extra room for either.
+**§2d and §2e do not apply here.** `review-security` seeds security findings only. How
+a file is organized is not a security finding, and neither is a comment that repeats
+the code under it. Seed no `file_split`, `over_engineered` or `ai_slop` annotations
+under this subcommand, and do not treat their separate budgets as extra room for any
+of them.
 
-## 2c. Writing the finding body (applies to §2, §2b and §2d)
+## 2c. Writing the finding body (applies to §2, §2b, §2d and §2e)
 
-§2, §2b and §2d decide **whether** something needs a comment. This section explains
-**how to write** every AI comment.
+§2, §2b, §2d and §2e decide **whether** something needs a comment. This section
+explains **how to write** every AI comment.
 
 > **This section is the single source of truth for AI comment wording.** Other documents
 > explain when comments are created and how they are sent. They point here instead of
@@ -786,7 +844,9 @@ the second most common; the point of §2 is to not produce either at scale.
 
 - **Exactly two rules: `file_split` and `over_engineered`.** Do not invent others.
   Function length, naming, formatting, duplicated logic, and layering violations are
-  **not** covered here and are not reasons to comment. Neither are generic taste
+  **not** covered here and are not reasons to comment (the one narrow case of
+  duplicated logic that is a finding, a re-implementation of a helper the repository
+  already has, belongs to §2e, not here). Neither are generic taste
   objections ("I would have modeled this differently"). If you think one of those
   matters, it either qualifies under a §2 category on its own evidence or it is not a
   finding.
@@ -849,6 +909,122 @@ the second most common; the point of §2 is to not produce either at scale.
   empty result is correct and expected; never manufacture one to use up the budget.
 - **The body follows §2c**, same as every other AI comment: the result a person can see
   first, in plain English, evidence after it, one clear action at the end.
+
+## 2e. Generated-code residue (LOCKED: separate budget, one rule, `ai_slop`)
+
+§2 covers defects. §2d covers structure. This section covers the one **residue**
+finding the pre-seed may make: text this diff added that carries no information and
+no behavior, in the shapes that code assistants leave behind when nobody cleans up
+after them. The rule is named `ai_slop` in these documents because that is what
+people call it. The name never appears in a comment body (see the tone rule below).
+
+Residue is the opposite kind of noise from §2's targets. A bug is one wrong line. Residue
+is twenty harmless lines that make the file longer, hide the lines that matter, and
+teach the next reader that comments here mean nothing. It is worth one comment per
+pattern, not one comment per line.
+
+- **One rule only: `ai_slop`, with exactly these seven signatures.** Do not invent an
+  eighth. Something that is not on this list is not residue, whatever it looks like.
+  1. **Narrating comments.** A comment this diff added that restates what the line
+     under it visibly does and says nothing about why: `// increment the counter`
+     above `counter++`, `# return the result` above `return result`, a banner like
+     `// ----- Helpers -----` in a file that had no banners before this diff. A
+     comment that names a reason, a constraint, a ticket, or a non-obvious
+     consequence is not residue, however short.
+  2. **Signature-echo docstrings.** A docstring or doc comment this diff added whose
+     whole content can be recovered from the signature: "Gets the user. Args:
+     user_id: the user id. Returns: the user." It qualifies only when the surrounding
+     file does not carry docstrings of that shape on its existing functions. If the
+     file already documents every function this way, the diff is following the local
+     convention and there is no finding.
+  3. **Guards that cannot fire.** A null check, type check, or `try`/`except` this
+     diff added around a value that the same diff shows cannot be null, cannot be
+     another type, or cannot raise: checking `if result is not None` on the line after
+     `result = SomeClass()`, or wrapping a pure arithmetic expression in a `try`. The
+     evidence must name the line that produces the value. A guard at a trust boundary
+     (user input, network, file system, a call into code outside the diff) is never
+     residue. A guard that could fire but is handled wrongly is a §2 category 1 or 3
+     finding, not this one.
+  4. **Dead additions.** An import, variable, parameter, function, constant, or
+     branch this diff added that nothing in the diff or the repository reads. You
+     must have looked: name the search you ran and what it found. A designed
+     abstraction that nothing uses yet is `over_engineered` (§2d); a leftover is this
+     rule. If you cannot tell the two apart, prefer §2d's stricter evidence bar and
+     seed under §2d or not at all.
+  5. **Conversation leftovers.** Text in code or comments addressed to a chat reader
+     rather than to the next maintainer: "Here is the updated function", "as
+     requested", "Note: in a real implementation you would…", "You may want to…", a
+     `TODO` with no owner and no ticket that this diff added, or emoji in comments in a
+     file that had none before. A single instance is enough evidence here, because the
+     text itself is the proof.
+  6. **Re-implemented helpers.** A function or block this diff added that does what a
+     helper already in the repository does (a hand-rolled retry loop next to an
+     existing `withRetry`, a second slugify, a local date formatter when the project
+     has one). The evidence must name the existing helper with its file and line, and
+     the two must really do the same job; "similar" is not "same". If the existing
+     helper cannot be used from here without a change outside the diff, say so in the
+     action and keep the finding `should_fix`.
+  7. **Tests that mirror the implementation.** A test this diff added that cannot fail
+     for the reason it exists. Three shapes qualify: the expected value is computed by
+     the same logic as the code under test (`assert total == sum(prices)` against a
+     function that returns `sum(prices)`); the unit under test is itself mocked or
+     patched, so the assertion checks the mock; or the only assertion is existence
+     (`is not None`, `toBeDefined`, "did not throw") for a function whose requirement
+     is a specific value or effect. The evidence names the requirement the test claims
+     to cover and the input that would violate it while the test still passes. If you
+     cannot name that input, there is no finding. A test that is merely thin, or that
+     covers a subset of cases, is not residue; only a test that cannot fail is.
+- **Not residue, do not comment:** comments that explain why; docstrings in a file that
+  already has them; defensive code at a boundary; type annotations, however verbose;
+  logging, however chatty, unless it is signature 3 or 4; long variable names; code
+  that is merely more verbose than you would have written. Verbosity that carries
+  information is style, and style is not a finding under any section here.
+- **The diff must have added it.** Every signature above says "this diff added". Text
+  that was already in the file before this PR is not billable to its author, even when
+  it is exactly the shape described. Never seed `severity: "pre_existing"` under this
+  rule; if the residue is pre-existing, there is no finding.
+- **Scope is `"line"`, one annotation per (file, signature).** Anchor the annotation to
+  the **first** changed line in the file that shows the signature, with `lineStart`
+  and `lineEnd` covering only that first instance. In the body, list the other lines in
+  the same file that show the same signature, up to five, then "and N more". Do not
+  seed a second annotation for the same signature in the same file. Do not seed
+  `scope: "file"` for this rule; a reviewer needs to see the exact lines to delete
+  them. Do not seed `scope: "general"`, for the reason given in §2d.
+- **Budget: ≤1 per (file, signature), ≤2 per file, ≤4 per review**, counted separately
+  from §2 and from §2d. Residue never displaces a probable bug or a structural note,
+  and neither of those makes room for more residue. When a file shows more than two
+  signatures, keep the two with the most instances. When the review would exceed four,
+  keep the four with the most instances across files. Trim silently.
+- **Severity is `"should_fix"`, always.** Residue has no behavior, so it cannot block
+  a merge, and `disproof` is never set. If you find yourself wanting `blocking`, the
+  thing you found has an effect, and an effect belongs to a §2 category with its own
+  evidence and its own `disproof`. Move it there or drop it.
+- **Tone: name the defect, never the author.** The body describes what the text does
+  and what to do about it: "This comment repeats the line under it. Delete it, or say
+  why the retry count is 3." It never says or implies that the code was generated,
+  never uses the words "AI", "generated", "slop", "boilerplate", "LLM", "assistant", or
+  "looks machine-written", and never speculates about who or what wrote it. Authorship
+  is unknowable from a diff, the author is a person who will read the comment, and
+  the fix is the same either way. A body that breaks this rule is a defect even when
+  the finding is correct.
+- **Body shape.** §2c applies, and its `should_fix` row is the ceiling: one or two
+  direct sentences, then the line list, then one action. The result sentence for
+  residue is the small true thing: "this comment adds nothing the line does not
+  already say", "nothing reads this import", "this does the same job as
+  `withRetry` in `lib/retry.ts:12`". Never inflate it into a risk. Never write
+  "this could confuse future maintainers" as if it were a traced effect.
+- **Same injection contract as §2**: always `origin: "ai"`, `accepted: false`, plus
+  `severity: "should_fix"` and a one-sentence `reasoning`. Use `type: "concern"`.
+  A `suggestion` with `suggestedCode` is allowed only for signature 1 and 5 when the
+  fix is a pure deletion of the anchored lines, because then the suggested code is
+  exactly the surrounding lines without the residue and there is nothing to get wrong.
+- **Zero is the normal outcome.** A clean diff written by anyone, or a diff whose
+  author already cleaned up, produces no residue finding. Never seed one to use the
+  budget, and never seed one on the strength of a single narrating comment when the
+  rest of the file is clean.   One stray comment is a nit, not a pattern: signatures 1
+  through 4 need at least two instances in the file before they qualify. Signatures 5,
+  6 and 7 qualify on one instance, because one conversation leftover, one duplicate of
+  an existing helper, or one test that cannot fail is a complete finding on its own.
 
 ## 3. Serve + wait
 

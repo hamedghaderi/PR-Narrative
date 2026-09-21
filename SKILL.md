@@ -143,10 +143,11 @@ sentence: same hard caps (≤3 per file, ≤10 per review), a `severity` plus a 
 reasoning on every draft, the same `origin: "ai", accepted: false` injection so nothing
 arrives pre-accepted, and zero findings is still a correct outcome; only the categories
 narrow to security. The `file_split` and `over_engineered` structural findings in
-`references/reviewer-ui.md` §2d are **not** part of this subcommand: how a file is
-organized is not a security finding, and neither is whether it carries more machinery
-than today's requirements need. Their separate budget is not extra room for either
-here.
+`references/reviewer-ui.md` §2d and the `ai_slop` residue finding in §2e are **not**
+part of this subcommand: how a file is organized is not a security finding, neither is
+whether it carries more machinery than today's requirements need, and neither is a
+comment that repeats the line under it. Their separate budgets are not extra room for
+any of them here.
 
 Every reviewer-mode guardrail holds verbatim: a posted review is **PENDING** only, this
 skill never submits a verdict, and a local-path review posts nothing anywhere.
@@ -590,14 +591,27 @@ understand:
   code, write for the same reader, tell it as a story, and use simple English. This
   narrative becomes the collapsible panel at the top of the annotation page, styled the
   same way as author mode's panels.
+- While writing that story, connect every changed file to it. Any file you cannot
+  connect goes into the "Changes this story does not explain" block that closes the
+  narrative (`references/reviewer-ui.md` §1). That block is how the review asks "can
+  the author explain every changed file?": you cannot answer it, so you hand the list to
+  the reviewer, who asks the author. It is never an AI annotation.
 
 ### 3. AI pre-seed (optional, capped, locked policy)
 
 You may pre-seed a small number of AI draft comments on genuinely risky lines before
-serving the page. The full definition lives in `references/reviewer-ui.md` §2 and is
+serving the page. Before you pick a single line, run the **five questions** at the top
+of `references/reviewer-ui.md` §2 over the whole diff: what could be deleted without
+losing the requested behavior, what duplicates something already in the repository,
+whether the tests verify the requirement or only mirror the implementation, whether an
+error becomes visible or is quietly turned into "success", and which changed files the
+story cannot explain. They add no categories and no budget; they decide which rule
+below a line falls under, and they catch what a line-by-line read misses.
+
+The full definition lives in `references/reviewer-ui.md` §2 and is
 **locked**: don't widen it. In summary: only lines actually changed in this diff;
 only four line-comment categories (probable bugs/logic errors, security issues, missing
-error handling on new paths, breaking-change risk to callers); hard caps of **≤3 per
+or hidden error handling on new paths, breaking-change risk to callers); hard caps of **≤3 per
 file, ≤10 per review**; every draft carries a `severity` and a one-sentence `reasoning`,
 and every `severity: "blocking"` draft also carries `disproof`, the smallest check
 that would prove the concern **false** (if you can't name one, it isn't blocking:
@@ -623,6 +637,24 @@ carries a `disproof` naming the check that would void it (for `over_engineered`,
 the machinery is load-bearing after all). If you cannot produce that evidence, there is
 no finding. Read `references/reviewer-ui.md` §2d before seeding either. Neither applies
 to `review-security`.
+
+One residue finding sits beside those, for text this diff added that carries no
+information and no behavior: `ai_slop`, defined in `references/reviewer-ui.md` §2e and
+**also locked**. It has exactly seven signatures: comments that narrate the line under
+them, docstrings that only echo the signature, guards around values the same diff shows
+cannot fail, additions nothing reads, text addressed to a chat reader instead of the
+next maintainer, a re-implementation of a helper the repository already has, and a
+test that cannot fail for the reason it exists (its expected value comes from the same
+logic as the code, it mocks the unit it claims to test, or it only asserts existence). In
+summary: `scope: "line"`, anchored to the first changed line that shows the pattern,
+with the other lines in that file listed in the body; **≤1 per (file, signature), ≤2
+per file, ≤4 per review**, counted separately from both budgets above; the diff must
+have added the text; signatures 1 through 4 need two instances in a file before they
+count; `severity` is always `should_fix`, so `disproof` is never set; and the body
+names the defect and never the author: no "AI", "generated", "slop", or any guess about
+who or what wrote the code. If the thing you found has an effect, it is a §2 finding
+with §2's evidence bar, not this one. Read §2e before seeding it. It does not apply to
+`review-security`.
 
 Finding the problem is only half of it. **Before you write any AI comment `body`, read and
 follow `references/reviewer-ui.md` §2c.** It is the single source of truth for order,
@@ -662,10 +694,12 @@ else's unverified comment into a finding you cannot support from the diff yourse
 you cannot support it, it is not your finding to make.
 
 None of this changes the locked pre-seed policy above. Do not add categories. Line
-comments go only on changed lines, and the only file-scoped exceptions are `file_split`
+comments go only on changed lines; the only file-scoped exceptions are `file_split`
 and `over_engineered` under `references/reviewer-ui.md` §2d, on their own shared
-budget. Do not raise either set of caps, add values to the `severity` enum, change the
-zero-findings outcome, or leave out the required `disproof` on a `blocking` finding.
+budget, and the only non-defect line finding is `ai_slop` under §2e, on its own. Do not
+raise any of the three sets of caps, add values to the `severity` enum, add an eighth
+residue signature, change the zero-findings outcome, or leave out the required
+`disproof` on a `blocking` finding.
 
 ### 4. Build the page, serve it, and wait
 
@@ -966,9 +1000,22 @@ question cannot produce a review verdict.
 
 - Every comment's anchor validated against the real hunks before it was posted or
   fix-listed; no bad-anchor `422`s reaching GitHub.
-- If you seeded AI drafts, they stayed inside the caps (≤3/file, ≤10/review). Each one
-  has a severity and a reason. Each one looks clearly different from a user comment on
-  the page. None was accepted for the user.
+- If you seeded AI drafts, they stayed inside the caps (≤3/file, ≤10/review for §2
+  findings; ≤2/review for §2d; ≤1 per file and signature, ≤2/file, ≤4/review for §2e).
+  Each one has a severity and a reason. Each one looks clearly different from a user
+  comment on the page. None was accepted for the user.
+- Every `ai_slop` draft is `should_fix`, is anchored to a line this diff added, lists
+  the other lines in the file that show the same pattern, and names the defect without
+  naming the author: no "AI", "generated", "slop", or guess about who wrote the code
+  anywhere in the body. Anything under that rule that turned out to have a behavioral
+  effect was moved to a §2 category with §2's evidence, or dropped.
+- The five questions were run over the whole diff, not only the hunks you happened to
+  read: you can say what could be deleted (or that nothing could), you searched for
+  duplicates, you read each added test asking what input would break the requirement
+  while the test still passes, you traced each new catch to what its caller sees, and
+  every changed file is either in the story or in the "Changes this story does not
+  explain" block. That block is absent when every file is accounted for, and it was
+  never turned into an annotation.
 - Every `blocking` AI draft has a `disproof` the author can actually run. It does not
   just repeat the concern. It tests **the same result, in the same part of the system,
   that the body named**: if the body says a page can fail, showing that a helper throws

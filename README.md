@@ -36,8 +36,8 @@ the PR itself.
 | | Plain agent prompt | Reviewer mode |
 |---|---|---|
 | Where findings land | Terminal scrollback | A pending review on the PR, anchored to real diff lines |
-| How many you get | Unbounded | Hard cap: 3 per file, 10 per review, plus at most 2 file-structure notes |
-| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk. Plus two capped structural notes: a file this diff pushed into a second responsibility, or machinery this diff built for requirements that don't exist yet |
+| How many you get | Unbounded | Hard cap: 3 per file, 10 per review, plus at most 2 file-structure notes and at most 4 residue notes |
+| What it comments on | Depends on the prompt and model | Four categories only: probable bugs, security, missing error handling, breaking-change risk. Plus two capped structural notes: a file this diff pushed into a second responsibility, or machinery this diff built for requirements that don't exist yet. Plus capped residue notes: comments that narrate the line under them, docstrings that echo the signature, guards that cannot fire, additions nothing reads, text written for a chat window, re-implementations of helpers the repo already has, and tests that cannot fail. The narrative also lists any changed file the story cannot account for, so you can ask the author |
 | How findings are triaged | Manually interpreted and copied from chat or terminal output | Each finding is visibly accepted or rejected before submission |
 | Who signs the review | Ambiguous | You do. The skill never sets Approve, Request changes, or Comment |
 
@@ -49,6 +49,19 @@ when nothing in the diff clears the bar, the page opens with no AI comments at a
 The structural notes are budgeted separately, at two per review across both kinds, so
 "this file now does two things" or "this machinery serves nobody yet" can never take a
 slot away from a real bug.
+
+Residue notes catch the leftovers that code assistants tend to leave behind: a comment
+on every line saying what the line says, a docstring that repeats the signature, a null
+check on a value that was constructed one line up, an import nothing uses, a "here is
+the updated function" in a code comment, a hand-rolled retry next to the project's own,
+a test whose expected value is computed by the code it is testing.
+They get their own budget too (one per pattern per file, two per file, four per review),
+and one note covers every line in the file that shows the same pattern, so a file with
+twenty narrating comments gets one comment listing them, not twenty. The note names the
+defect and the fix; it never guesses who or what wrote the code, because the author is a
+person who will read it and the fix is the same either way. Residue is always
+`should_fix`, never blocking: if it had a behavioral effect it would be a bug, and bugs
+have their own rules.
 
 ## How it works
 
